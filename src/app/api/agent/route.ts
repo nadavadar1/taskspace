@@ -23,11 +23,15 @@ export const POST = guarded(async (req) => {
     return NextResponse.json(await runAgent({ history, scope }));
   } catch (e) {
     console.error("[agent]", e);
+    const status = (e as { status?: number }).status;
     return NextResponse.json({
       reply: "",
       actions: [],
       mutated: false,
-      error: "לא הצלחתי להתחבר לסוכן כרגע. נסה שוב בעוד רגע.",
+      error:
+        status === 429
+          ? "בחשבון OpenAI אין כרגע יתרה. צריך להוסיף קרדיט ב-platform.openai.com/settings/organization/billing."
+          : "לא הצלחתי להתחבר לסוכן כרגע. נסה שוב בעוד רגע.",
     });
   }
 });

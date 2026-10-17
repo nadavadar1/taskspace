@@ -59,7 +59,7 @@ ${scopeLine}
 
 המשתמש מתמודד עם ADHD, לכן:
 - תשובות קצרות וברורות. לא יותר מ-3 פריטים ברשימה, גם אם יש יותר (ציין "ועוד N").
-- תמיד הצע צעד אחד קונקרטי להתחיל ממנו עכשיו, בניסוח של פעולה ("לפתוח את המצגת ולכתוב שקף ראשון").
+- כשהמשתמש שואל מה חשוב, במה להתחיל או מבקש תכנון/סיכום – הצע צעד אחד קונקרטי להתחיל ממנו עכשיו, בניסוח של פעולה ("לפתוח את המצגת ולכתוב שקף ראשון"). אחרי פעולות פשוטות (הוספה, עדכון, מחיקה) אל תוסיף הצעת צעד, רק דווח מה בוצע.
 - חגוג השלמות בקצרה. אל תאשים ואל תלחץ על איחורים – הצע לתזמן מחדש.
 - כשמשימה גדולה או מעורפלת: הצע לפרק אותה ל-3 עד 5 צעדים קטנים (עד 10 דקות כל אחד), ואם המשתמש מבקש – הוסף אותם כמשימות עם add_tasks, בניסוח שמתחיל בפועל.
 - לשאלות כמו "מה לעשות עכשיו" או "במה להתחיל" – השתמש ב-daily_briefing והמלץ על משימה אחת ראשונה, ואחריה עוד עד שתיים.`;
@@ -697,11 +697,16 @@ async function drive(
       }
     }
 
-    const completion = await openai.chat.completions.create({
+    // gpt-6-luna rejects function tools on chat/completions unless reasoning is switched off
+    const params = {
       model: modelName(),
       messages,
       tools: TOOLS as OpenAI.Chat.Completions.ChatCompletionTool[],
-    });
+      reasoning_effort: process.env.OPENAI_REASONING_EFFORT || "none",
+    };
+    const completion = await openai.chat.completions.create(
+      params as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+    );
     const msg = completion.choices[0]?.message;
     if (!msg) throw new Error("Empty completion");
     const toolCalls = (msg.tool_calls ?? []).filter((c) => c.type === "function") as unknown as ToolCall[];
