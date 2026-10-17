@@ -188,7 +188,14 @@ export async function deleteTasks(ids: number[]): Promise<number> {
 export async function getSettings(): Promise<Settings> {
   await ensureSchema();
   const rows = await sql()`select value from ts_settings where key = 'dashboard_spaces'`;
-  const v = rows[0]?.value;
+  let v = rows[0]?.value;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      v = null;
+    }
+  }
   return { dashboard_spaces: Array.isArray(v) ? (v as number[]) : null };
 }
 
@@ -199,8 +206,8 @@ export async function setDashboardSpaces(ids: number[] | null): Promise<void> {
     await db`delete from ts_settings where key = 'dashboard_spaces'`;
     return;
   }
-  const json = JSON.stringify(ids.filter((n) => Number.isInteger(n)));
+  const clean = ids.filter((n) => Number.isInteger(n));
   await db`
-    insert into ts_settings (key, value) values ('dashboard_spaces', ${json}::jsonb)
+    insert into ts_settings (key, value) values ('dashboard_spaces', ${db.json(clean)})
     on conflict (key) do update set value = excluded.value`;
 }

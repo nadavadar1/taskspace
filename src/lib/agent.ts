@@ -683,7 +683,7 @@ async function drive(
       if (r.pending) {
         const id = randomUUID();
         const state: PendingState = { messages, calls: r.pending.remaining, scope };
-        await sql()`insert into ts_agent_pending (id, state) values (${id}, ${JSON.stringify(state)}::jsonb)`;
+        await sql()`insert into ts_agent_pending (id, state) values (${id}, ${sql().json(state as never)})`;
         await sql()`delete from ts_agent_pending where created_at < now() - interval '2 days'`;
         const info = r.pending.info;
         return {
@@ -749,7 +749,8 @@ export async function resolvePending(id: string, approve: boolean): Promise<Agen
   if (!rows.length) {
     return { reply: "הבקשה הזו כבר טופלה או פגה. אפשר לבקש שוב.", actions: [], mutated: false };
   }
-  const state = rows[0].state as PendingState;
+  const raw = rows[0].state as PendingState | string;
+  const state: PendingState = typeof raw === "string" ? JSON.parse(raw) : raw;
   const ctx = await buildCtx(state.scope);
   const messages = state.messages;
   if (!approve) {
