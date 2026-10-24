@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Bell, Loader2, Trash2 } from "lucide-react";
 import { useData } from "./DataProvider";
 import { Modal, StatusIcon, cn } from "./ui";
-import { PRIORITIES, STATUSES } from "@/lib/constants";
+import { PRIORITIES, STATUSES, isClosed } from "@/lib/constants";
 import { addDays, utcToZoned, zonedToUtcISO } from "@/lib/dates";
 import { REPEAT_LABELS, primaryReminder, taskDeadlineUTC } from "@/lib/reminder-utils";
 import type { Priority, RepeatKind, Status } from "@/lib/types";
@@ -42,7 +42,9 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState(editing?.title ?? defaults.title ?? "");
   const [description, setDescription] = useState(editing?.description ?? "");
   const [priority, setPriority] = useState<Priority>(editing?.priority ?? defaults.priority ?? "medium");
-  const [status, setStatus] = useState<Status>(editing?.status ?? defaults.status ?? "new");
+  const presetStatus = taskDialog?.mode === "edit" ? taskDialog.status : undefined;
+  const [status, setStatus] = useState<Status>(presetStatus ?? editing?.status ?? defaults.status ?? "new");
+  const [statusNote, setStatusNote] = useState(editing?.status_note ?? "");
   const [due, setDue] = useState<string>(editing ? (editing.due_date ?? "") : (defaults.due_date ?? ""));
   const [dueTime, setDueTime] = useState<string>(editing ? (editing.due_time ?? "") : (defaults.due_time ?? ""));
   const [spaceId, setSpaceId] = useState<number | undefined>(
@@ -62,7 +64,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [remTime, setRemTime] = useState(remStart.time);
   // when the task was created in this dialog but the reminder failed, saving again must not create it twice
   const createdId = useRef<number | null>(null);
-  const done = status === "done";
+  const done = isClosed(status); // done or not done: no reminders any more
   const frequencies: RepeatKind[] = existingReminder?.repeat === "every_n_days" ? [...FREQUENCIES, "every_n_days"] : FREQUENCIES;
 
   function changeTitle(v: string) {
@@ -93,6 +95,11 @@ function TaskForm({ onClose }: { onClose: () => void }) {
       toast("אין מרחב לשמירה. צור מרחב קודם.");
       return;
     }
+    if (status === "not_done" && !statusNote.trim()) {
+      toast("כתוב למה המשימה לא בוצעה או למה אי אפשר לבצע אותה");
+      return;
+    }
+    const noteField = status === "not_done" ? { status_note: statusNote.trim() } : {};
     const withReminder = remOn && !done;
     if (withReminder) {
       if (!remDate || !remTime) {
@@ -119,6 +126,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         description,
         priority,
         status,
+        ...noteField,
         due_date: due || null,
         due_time: due && dueTime ? dueTime : null,
         space_id: spaceId,
@@ -130,6 +138,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         description,
         priority,
         status,
+        ...noteField,
         due_date: due || null,
         due_time: due && dueTime ? dueTime : null,
       });
@@ -238,7 +247,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         </Field>
 
         <Field label="סטטוס">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {STATUSES.map((s) => (
               <button
                 key={s.key}
@@ -259,6 +268,23 @@ function TaskForm({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+          {status === "not_done" && (
+            <div className="mt-3 rounded-2xl border border-stone-200 bg-stone-50 p-3">
+              <label className="mb-1.5 block text-sm font-medium text-stone-700" htmlFor="status-note">
+                למה לא בוצעה, או למה אי אפשר לבצע?
+              </label>
+              <textarea
+                id="status-note"
+                autoFocus
+                value={statusNote}
+                onChange={(e) => setStatusNote(e.target.value)}
+                rows={2}
+                placeholder="למשל: הקורס נדחה, מחכה לאישור מנמרוד, אין גישה למערכת..."
+                className="w-full resize-none rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+              />
+              <p className="mt-1.5 text-xs text-muted">ההערה מוצגת על המשימה, כדי שתזכור מה קרה.</p>
+            </div>
+          )}
         </Field>
 
         <div className="grid gap-5">
@@ -350,7 +376,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
               </span>
             </button>
 
-            {done && <p className="mt-2 text-xs text-muted">משימה שהושלמה לא שולחת תזכורות.</p>}
+            {done && <p className="mt-2 text-xs text-muted">משימה סגורה (הושלמה או לא בוצעה) לא שולחת תזכורות.</p>}
 
             {remOn && !done && (
               <div className="mt-3 space-y-3">

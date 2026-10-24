@@ -8,7 +8,7 @@ import { KanbanView } from "./KanbanView";
 import { TodoView } from "./TodoView";
 import { CalendarView } from "./CalendarView";
 import { cn, useMounted } from "./ui";
-import { VIEWS } from "@/lib/constants";
+import { VIEWS, isClosed } from "@/lib/constants";
 import type { ViewType } from "@/lib/types";
 
 const ICONS: Record<ViewType, React.ReactNode> = {
@@ -34,7 +34,7 @@ export function SpaceView({ id }: { id: number }) {
     );
   }
 
-  const open = tasks.filter((t) => t.space_id === space.id && t.status !== "done").length;
+  const open = tasks.filter((t) => t.space_id === space.id && !isClosed(t.status)).length;
 
   return (
     <div>
@@ -43,7 +43,7 @@ export function SpaceView({ id }: { id: number }) {
           <span className="h-9 w-2 rounded-full" style={{ backgroundColor: space.color }} />
           <div>
             <h1 className="text-2xl font-bold leading-tight">{space.name}</h1>
-            <p className="text-sm text-muted">{open === 0 ? "אין משימות פתוחות" : `${open} משימות פתוחות`}</p>
+            <p className="text-sm text-muted">{open === 0 ? "אין משימות פתוחות" : open === 1 ? "משימה פתוחה אחת" : `${open} משימות פתוחות`}</p>
           </div>
           <button
             onClick={() => openSpaceDialog({ mode: "edit", id: space.id })}

@@ -110,6 +110,13 @@ export function StatusIcon({ status, size = 16 }: { status: Status; size?: numbe
           <path d="M8 6.8v6.4M12 6.8v6.4" stroke={color} strokeWidth="2" strokeLinecap="round" />
         </svg>
       );
+    case "not_done":
+      return (
+        <svg {...common}>
+          <circle cx="10" cy="10" r="8.2" stroke={color} strokeWidth="2" />
+          <path d="M7 7l6 6M13 7l-6 6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
     default:
       return (
         <svg {...common}>

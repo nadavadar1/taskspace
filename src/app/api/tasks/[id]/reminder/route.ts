@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { guarded, readJson } from "@/lib/api";
+import { isClosed } from "@/lib/constants";
 import { isHHMM, isISO, zonedToUtcISO } from "@/lib/dates";
 import { REPEAT_KINDS, taskDeadlineUTC } from "@/lib/reminder-utils";
 import { removeTaskReminder, upsertTaskReminder } from "@/lib/reminders";
@@ -16,8 +17,8 @@ export const POST = guarded<Ctx>(async (req, ctx) => {
   const id = Number((await ctx.params).id);
   const task = await getTask(id);
   if (!task) return NextResponse.json({ error: "המשימה לא נמצאה" }, { status: 404 });
-  if (task.status === "done") {
-    return NextResponse.json({ error: "משימה שהושלמה לא יכולה לקבל תזכורת" }, { status: 400 });
+  if (isClosed(task.status)) {
+    return NextResponse.json({ error: "משימה סגורה (הושלמה או לא בוצעה) לא יכולה לקבל תזכורת" }, { status: 400 });
   }
 
   const body = await readJson(req);

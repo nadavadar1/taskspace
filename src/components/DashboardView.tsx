@@ -7,7 +7,7 @@ import { useData } from "./DataProvider";
 import { TaskCard } from "./TaskCard";
 import { CalendarView } from "./CalendarView";
 import { cn, useMounted } from "./ui";
-import { PRIORITY_MAP } from "@/lib/constants";
+import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Task, ViewType } from "@/lib/types";
 
@@ -48,7 +48,7 @@ export function DashboardView() {
   const calendarSpaces = useMemo(() => spaces.filter((s) => selected.includes(s.id)), [spaces, selected]);
 
   const scoped = useMemo(() => tasks.filter((t) => selected.includes(t.space_id)), [tasks, selected]);
-  const open = useMemo(() => scoped.filter((t) => t.status !== "done"), [scoped]);
+  const open = useMemo(() => scoped.filter((t) => !isClosed(t.status)), [scoped]);
 
   const groups = useMemo(() => {
     const rank = (t: Task) => PRIORITY_MAP[t.priority].rank;
@@ -64,7 +64,7 @@ export function DashboardView() {
   const weekStart = startOfWeek(today);
   const spaceStats = (spaceId: number) => {
     const st = tasks.filter((t) => t.space_id === spaceId);
-    const o = st.filter((t) => t.status !== "done");
+    const o = st.filter((t) => !isClosed(t.status));
     return {
       open: o.length,
       overdue: o.filter((t) => t.due_date && t.due_date < today).length,

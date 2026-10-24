@@ -15,7 +15,7 @@ import {
 import { Bell, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useData } from "./DataProvider";
 import { cn, StatusIcon } from "./ui";
-import { PRIORITY_MAP } from "@/lib/constants";
+import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { HE_DAYS, HE_MONTHS, monthGrid, parts, formatLong } from "@/lib/dates";
 import { reminderFiresOn } from "@/lib/reminder-utils";
 import type { Reminder, Space, Task } from "@/lib/types";
@@ -38,6 +38,9 @@ function Chip({
 }) {
   const p = PRIORITY_MAP[task.priority];
   const done = task.status === "done";
+  const notDone = task.status === "not_done";
+  // with several spaces the chip wears its space's colour; the priority colour moves to a small dot at the end
+  const tint = spaceColor ?? p.color;
   return (
     <div
       onClick={(e) => {
@@ -47,18 +50,27 @@ function Chip({
       className={cn(
         "flex cursor-pointer items-center gap-1 truncate rounded-md border-s-[3px] px-1.5 py-[3px] text-[12px] font-medium leading-tight transition",
         floating ? "shadow-lg" : "hover:brightness-95",
-        done && "opacity-60",
+        (done || notDone) && "opacity-60",
       )}
-      style={{ backgroundColor: `${p.color}1f`, borderColor: p.color, color: "#1e2433" }}
-      title={task.title}
+      style={{
+        backgroundColor: `${tint}${spaceColor ? "33" : "1f"}`,
+        borderColor: tint,
+        color: "#1e2433",
+      }}
+      title={notDone && task.status_note ? `${task.title} — לא בוצעה: ${task.status_note}` : task.title}
     >
-      {spaceColor && (
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: spaceColor }} aria-hidden />
-      )}
       <StatusIcon status={task.status} size={11} />
       {task.due_time && <span className="shrink-0 font-semibold opacity-80">{task.due_time}</span>}
       <span className={cn("truncate", done && "line-through")}>{task.title}</span>
       {hasReminder && <Bell size={11} className="shrink-0 text-amber-600" aria-label="יש תזכורת" />}
+      {spaceColor && (
+        <span
+          className="ms-auto h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: p.color }}
+          title={`עדיפות: ${p.label}`}
+          aria-label={`עדיפות ${p.label}`}
+        />
+      )}
     </div>
   );
 }
@@ -200,9 +212,9 @@ export function CalendarView({ spaces }: { spaces: Space[] }) {
     return m;
   }, [reminders]);
   const bellOf = (t: Task, day: string) =>
-    t.status !== "done" && (remindersByTask.get(t.id) ?? []).some((r) => reminderFiresOn(r, day, t));
+    !isClosed(t.status) && (remindersByTask.get(t.id) ?? []).some((r) => reminderFiresOn(r, day, t));
 
-  const undated = scopedTasks.filter((t) => !t.due_date && t.status !== "done");
+  const undated = scopedTasks.filter((t) => !t.due_date && !isClosed(t.status));
   const grid = useMemo(() => monthGrid(cursor.y, cursor.m), [cursor]);
   const active = activeId ? scopedTasks.find((t) => t.id === activeId) : undefined;
 
@@ -297,6 +309,10 @@ export function CalendarView({ spaces }: { spaces: Space[] }) {
           <span className="inline-flex items-center gap-1.5">
             <Bell size={11} className="text-amber-600" />
             יש תזכורת
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+            הנקודה בקצה = עדיפות
           </span>
         </div>
       )}

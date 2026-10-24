@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Priority, Reminder, RepeatKind, Settings, Space, Status, Task, ViewType } from "@/lib/types";
 import { todayISO } from "@/lib/dates";
+import { isClosed } from "@/lib/constants";
 
 export interface NewTaskDefaults {
   space_id?: number;
@@ -13,7 +14,8 @@ export interface NewTaskDefaults {
   title?: string;
 }
 
-type TaskDialogState = { mode: "edit"; id: number } | { mode: "new"; defaults: NewTaskDefaults } | null;
+/** `status` pre-selects a status when the dialog opens (e.g. a card dropped on the "not done" column). */
+type TaskDialogState = { mode: "edit"; id: number; status?: Status } | { mode: "new"; defaults: NewTaskDefaults } | null;
 type SpaceDialogState = { mode: "new" } | { mode: "edit"; id: number } | null;
 
 interface Toast {
@@ -38,7 +40,9 @@ interface DataCtx {
   refresh: () => Promise<void>;
   saveTaskReminder: (taskId: number, input: TaskReminderInput) => Promise<boolean>;
   removeTaskReminder: (taskId: number) => Promise<void>;
-  addTask: (input: NewTaskDefaults & { space_id: number; title: string; description?: string }) => Promise<Task | null>;
+  addTask: (
+    input: NewTaskDefaults & { space_id: number; title: string; description?: string; status_note?: string },
+  ) => Promise<Task | null>;
   patchTask: (id: number, patch: Partial<Task>) => Promise<void>;
   removeTask: (id: number) => Promise<void>;
   addSpace: (input: { name: string; color: string; view: ViewType }) => Promise<Space | null>;
@@ -48,7 +52,7 @@ interface DataCtx {
   toast: (message: string) => void;
   toasts: Toast[];
   taskDialog: TaskDialogState;
-  openTask: (id: number) => void;
+  openTask: (id: number, status?: Status) => void;
   openNewTask: (defaults?: NewTaskDefaults) => void;
   closeTaskDialog: () => void;
   spaceDialog: SpaceDialogState;
@@ -88,6 +92,8 @@ function localPatch(task: Task, patch: Partial<Task>): Task {
   const next = { ...task, ...patch };
   if (patch.status && patch.status !== task.status) {
     next.completed_at = patch.status === "done" ? new Date().toISOString() : null;
+    // the reason only belongs to "not done"; the server keeps the same rule
+    if (patch.status !== "not_done" && patch.status_note === undefined) next.status_note = "";
   }
   return next;
 }
@@ -171,8 +177,8 @@ export function DataProvider({
       try {
         const { task } = await request<{ task: Task }>(`/api/tasks/${id}`, "PATCH", patch);
         setTasks((list) => list.map((t) => (t.id === id ? task : t)));
-        // the server switches off the reminders of a task that is marked done
-        if (patch.status === "done") setReminders((list) => list.filter((r) => r.task_id !== id));
+        // the server switches off the reminders of a task that is closed (done / not done)
+        if (patch.status && isClosed(patch.status)) setReminders((list) => list.filter((r) => r.task_id !== id));
       } catch (e) {
         if (before) setTasks((list) => list.map((t) => (t.id === id ? before! : t)));
         toast(e instanceof Error ? e.message : "העדכון נכשל");
@@ -308,7 +314,7 @@ export function DataProvider({
       toast,
       toasts,
       taskDialog,
-      openTask: (id) => setTaskDialog({ mode: "edit", id }),
+      openTask: (id, status) => setTaskDialog({ mode: "edit", id, status }),
       openNewTask: (defaults = {}) => setTaskDialog({ mode: "new", defaults }),
       closeTaskDialog: () => setTaskDialog(null),
       spaceDialog,

@@ -142,9 +142,9 @@ export async function claimDueReminders(now: Date = new Date()): Promise<Reminde
 
 /** The claim logic on an open transaction. Exported so it can be exercised inside a transaction that is rolled back. */
 export async function claimWith(tx: Tx, now: Date): Promise<Reminder[]> {
-  // reminders of finished tasks never fire again
+  // reminders of closed tasks (done / not done) never fire again
   await tx`update ts_reminders set enabled = false
-           where enabled and task_id in (select id from ts_tasks where status = 'done')`;
+           where enabled and task_id in (select id from ts_tasks where status in ('done', 'not_done'))`;
   const rows = await tx.unsafe(
     `select ${REMINDER_COLS_R},
             to_char(t.due_date, 'YYYY-MM-DD') as t_due_date,
