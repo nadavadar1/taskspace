@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/";
+    window.location.reload(); // the session cookie is gone, so the login screen shows up
   }
 
   return (
