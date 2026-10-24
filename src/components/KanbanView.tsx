@@ -66,13 +66,15 @@ function Column({
           <span>{status.label}</span>
           <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-muted">{tasks.length}</span>
         </div>
-        <button
-          onClick={onAdd}
-          className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-primary"
-          aria-label={`משימה חדשה ב${status.label}`}
-        >
-          <Plus size={16} />
-        </button>
+        {status.key !== "not_done" && (
+          <button
+            onClick={onAdd}
+            className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-primary"
+            aria-label={`משימה חדשה ב${status.label}`}
+          >
+            <Plus size={16} />
+          </button>
+        )}
       </header>
       <div ref={setNodeRef} className="flex flex-1 flex-col gap-2">
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -82,7 +84,7 @@ function Column({
         </SortableContext>
         {tasks.length === 0 && (
           <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-300 py-6 text-xs text-muted">
-            גרור לכאן משימה
+            {status.key === "not_done" ? "גרור לכאן משימה שלא בוצעה ותכתוב למה" : "גרור לכאן משימה"}
           </div>
         )}
       </div>
@@ -101,7 +103,7 @@ export function KanbanView({ space }: { space: Space }) {
 
   const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id), [tasks, space.id]);
   const columns = useMemo(() => {
-    const by: Record<Status, Task[]> = { new: [], in_progress: [], on_hold: [], done: [] };
+    const by: Record<Status, Task[]> = { new: [], in_progress: [], on_hold: [], done: [], not_done: [] };
     for (const t of spaceTasks) by[t.status].push(t);
     for (const k of Object.keys(by) as Status[]) by[k].sort((a, b) => a.position - b.position || a.id - b.id);
     return by;
@@ -149,6 +151,11 @@ export function KanbanView({ space }: { space: Space }) {
     else position = 1;
 
     if (targetStatus === task.status && Math.abs(position - task.position) < 1e-9) return;
+    // "not done" needs a reason: open the task with that status chosen instead of moving the card blindly
+    if (targetStatus === "not_done" && task.status !== "not_done") {
+      openTask(id, "not_done");
+      return;
+    }
     void patchTask(id, { status: targetStatus, position });
   }
 
@@ -160,7 +167,7 @@ export function KanbanView({ space }: { space: Space }) {
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {STATUSES.map((s) => (
           <Column
             key={s.key}

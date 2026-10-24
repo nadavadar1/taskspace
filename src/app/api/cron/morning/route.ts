@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listTasks } from "@/lib/store";
+import { isClosed } from "@/lib/constants";
 import { todayISO } from "@/lib/dates";
 import { broadcastPush } from "@/lib/push";
 
@@ -20,7 +21,7 @@ async function run(req: Request): Promise<Response> {
   try {
     const today = todayISO();
     const tasks = await listTasks();
-    const open = tasks.filter((t) => t.status !== "done");
+    const open = tasks.filter((t) => !isClosed(t.status));
     const overdue = open.filter((t) => t.due_date && t.due_date < today).length;
     const dueToday = open.filter((t) => t.due_date === today).length;
     if (!overdue && !dueToday) {

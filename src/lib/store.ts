@@ -1,12 +1,13 @@
 import "server-only";
 import { ensureSchema, sql } from "./db";
+import { ValidationError } from "./errors";
 import { isHHMM, isISO } from "./dates";
 import { PRIORITY_KEYS, STATUS_KEYS, VIEW_KEYS } from "./constants";
 import type { Priority, Settings, Space, Status, Task, ViewType } from "./types";
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
   to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
-  position, created_at, completed_at`;
+  status_note, position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -18,6 +19,7 @@ function mapTask(r: Record<string, unknown>): Task {
     status: r.status as Status,
     due_date: (r.due_date as string | null) ?? null,
     due_time: (r.due_time as string | null) ?? null,
+    status_note: (r.status_note as string | null) ?? "",
     position: Number(r.position),
     created_at: new Date(r.created_at as string).toISOString(),
     completed_at: r.completed_at ? new Date(r.completed_at as string).toISOString() : null,
@@ -109,8 +111,11 @@ export interface TaskInput {
   status?: string;
   due_date?: string | null;
   due_time?: string | null;
+  status_note?: string;
   position?: number;
 }
+
+export const NOT_DONE_NEEDS_REASON = "צריך לכתוב למה המשימה לא בוצעה או למה אי אפשר לבצע אותה";
 
 export async function createTask(input: TaskInput): Promise<Task> {
   await ensureSchema();
@@ -122,16 +127,18 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const due = isISO(input.due_date) ? input.due_date : null;
   const dueTime = due && isHHMM(input.due_time) ? input.due_time : null;
   const description = String(input.description ?? "").slice(0, 4000);
+  const note = status === "not_done" ? String(input.status_note ?? "").trim().slice(0, 1000) : "";
+  if (status === "not_done" && !note) throw new ValidationError(NOT_DONE_NEEDS_REASON);
   let position = input.position;
   if (typeof position !== "number" || !Number.isFinite(position)) {
     const [{ max }] = await db`select coalesce(max(position), 0)::float as max from ts_tasks where space_id = ${input.space_id}`;
     position = Number(max) + 1;
   }
   const rows = await db.unsafe(
-    `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8, ${status === "done" ? "now()" : "null"})
+    `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
-    [input.space_id, title, description, priority, status, due, dueTime, position],
+    [input.space_id, title, description, priority, status, due, dueTime, position, note],
   );
   return mapTask(rows[0]);
 }
@@ -144,12 +151,26 @@ export interface TaskPatch {
   status?: string;
   due_date?: string | null;
   due_time?: string | null;
+  status_note?: string;
   position?: number;
 }
 
 export async function updateTask(id: number, patch: TaskPatch): Promise<Task | null> {
   await ensureSchema();
   const db = sql();
+  // "not done" must always come with a reason, so the user can later see why
+  let statusNote: string | undefined;
+  if (patch.status === "not_done") {
+    const given = typeof patch.status_note === "string" ? patch.status_note.trim() : "";
+    statusNote = given || (await getTask(id))?.status_note || "";
+    if (!statusNote) throw new ValidationError(NOT_DONE_NEEDS_REASON);
+    statusNote = statusNote.slice(0, 1000);
+  } else if (STATUS_KEYS.includes(patch.status as Status)) {
+    statusNote = ""; // moving to any other status drops the old reason
+  } else if (typeof patch.status_note === "string") {
+    const current = await getTask(id);
+    if (current?.status === "not_done" && patch.status_note.trim()) statusNote = patch.status_note.trim().slice(0, 1000);
+  }
   const sets: string[] = [];
   const vals: unknown[] = [];
   const push = (col: string, v: unknown) => {
@@ -173,9 +194,14 @@ export async function updateTask(id: number, patch: TaskPatch): Promise<Task | n
     if (patch.status === "done") sets.push("completed_at = coalesce(completed_at, now())");
     else sets.push("completed_at = null");
   }
+  if (statusNote !== undefined) push("status_note", statusNote);
   if (sets.length) {
     vals.push(id);
     await db.unsafe(`update ts_tasks set ${sets.join(", ")} where id = $${vals.length}`, vals as never[]);
+  }
+  // a closed task stops nagging: switch off its open reminders (re-opening the task doesn't bring them back)
+  if (patch.status === "done" || patch.status === "not_done") {
+    await db`update ts_reminders set enabled = false where task_id = ${id} and enabled`;
   }
   return getTask(id);
 }

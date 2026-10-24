@@ -1,5 +1,5 @@
 export type Priority = "low" | "medium" | "high" | "urgent";
-export type Status = "new" | "in_progress" | "on_hold" | "done";
+export type Status = "new" | "in_progress" | "on_hold" | "done" | "not_done";
 export type ViewType = "kanban" | "todo" | "calendar";
 
 export interface Space {
@@ -19,6 +19,8 @@ export interface Task {
   status: Status;
   due_date: string | null; // YYYY-MM-DD
   due_time: string | null; // HH:MM, Israel time
+  /** Why the task wasn't done / can't be done. Only meaningful (and required) when status is "not_done". */
+  status_note: string;
   position: number;
   created_at: string;
   completed_at: string | null;
@@ -28,7 +30,7 @@ export interface Settings {
   dashboard_spaces: number[] | null; // null = all
 }
 
-export type RepeatKind = "none" | "daily" | "weekly" | "every_n_days";
+export type RepeatKind = "none" | "hourly" | "daily" | "weekly" | "every_n_days";
 
 export interface Reminder {
   id: number;
