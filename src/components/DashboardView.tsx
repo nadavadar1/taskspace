@@ -178,7 +178,12 @@ export function DashboardView() {
 
           {/* combined calendar */}
           <section className="mb-8">
-            <h2 className="mb-3 text-lg font-bold">יומן</h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold">יומן</h2>
+              <Link href="/calendar" className="text-sm font-medium text-primary hover:underline">
+                פתיחה במסך מלא
+              </Link>
+            </div>
             {calendarSpaces.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-slate-300 bg-surface py-10 text-center text-sm text-muted">
                 בחר לפחות מרחב אחד למעלה כדי לראות אותו ביומן.

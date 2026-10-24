@@ -266,7 +266,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
           {status === "not_done" && (
             <div className="mt-3 rounded-2xl border border-stone-200 bg-stone-50 p-3">
               <label className="mb-1.5 block text-sm font-medium text-stone-700" htmlFor="status-note">
-                הערה: למה לא בוצעה, או למה אי אפשר לבצע?
+                הערה: למה לא בוצעה?
               </label>
               <textarea
                 id="status-note"
@@ -274,7 +274,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 value={statusNote}
                 onChange={(e) => setStatusNote(e.target.value)}
                 rows={2}
-                placeholder="למשל: הקורס נדחה, מחכה לאישור מנמרוד, אין גישה למערכת..."
+                placeholder="למשל: לא רלוונטי יותר, יקר מדי, הקורס נדחה, אי אפשר לבצע כרגע..."
                 className="w-full resize-none rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
               />
               <p className="mt-1.5 text-xs text-muted">לא חובה: אפשר להשאיר ריק ולהוסיף אחר כך. ההערה מוצגת על המשימה.</p>
