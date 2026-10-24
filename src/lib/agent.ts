@@ -16,7 +16,7 @@ import {
   zonedToUtcISO,
 } from "./dates";
 import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP, isClosed } from "./constants";
-import { createTask, deleteTasks, getTask, listSpaces, listTasks, updateTask } from "./store";
+import { createTask, deleteTasks, getStudyCourses, getTask, listSpaces, listTasks, updateTask } from "./store";
 import { createReminder, deleteReminders, listReminders, listRemindersByIds } from "./reminders";
 import type { AgentResponse, AgentScope, PendingInfo, Priority, RepeatKind, Space, Status, Task } from "./types";
 
@@ -29,6 +29,7 @@ interface Ctx {
   single: Space | null;
   today: string;
   now: string; // HH:MM, Israel time
+  courses: string[];
 }
 
 interface Out {
@@ -55,6 +56,12 @@ function systemPrompt(ctx: Ctx): string {
   const scopeLine = ctx.single
     ? `הבחירה הנוכחית: מרחב אחד בלבד – "${ctx.single.name}". אתה רואה ופועל אך ורק על המשימות שלו.`
     : `הבחירה הנוכחית: כל המרחבים (${ctx.scopeSpaces.map((s) => `"${s.name}"`).join(", ") || "אין מרחבים"}).`;
+  const coursesBlock = ctx.courses.length
+    ? `
+קורסים בלימודים (${ctx.courses.length}): ${ctx.courses.map((c) => `"${c}"`).join(", ")}.
+כשהמשתמש מזכיר מטלה, הגשה, בוחן או מבחן של קורס (גם בשם קצר או באנגלית, למשל "קריפטו", "WEB", "סייבר"): התאם לקורס הקרוב ביותר ברשימה (אם יש ספק בין שני קורסים – שאל שאלה אחת). הוסף אותה עם add_tasks למרחב "לימודים" בכותרת בפורמט "<שם הקורס המלא> – <מה>" (למשל "חשבונאות – מטלה 3"), עם due_date לפי תאריך ההגשה. אם לא נאמר תאריך הגשה – שאל. עדיפות: urgent אם ההגשה בתוך יומיים, high אם בתוך שבוע, אחרת medium. בתיאור המשימה שים פרטים שנאמרו (אופן הגשה, ציון, הערות).
+`
+    : "";
   return `אתה "עוזר המשימות" – סוכן AI שמובנה בתוך מערכת אישית לניהול משימות. אתה עובד בעברית בלבד.
 
 היום: יום ${dow}, ${ctx.today}. השעה עכשיו: ${ctx.now} (שעון ישראל). השבוע מתחיל ביום ראשון.
@@ -72,6 +79,7 @@ ${scopeLine}
 9. פורמט: טקסט פשוט. מותר **הדגשה** ורשימות שמתחילות ב"- ". בלי טבלאות ובלי כותרות.
 10. תזכורות: ל"עוד X דקות/שעות" השתמש בפרמטר in_minutes (יחסי מהרגע הזה). לזמן מוחלט ("מחר ב-9", "ביום ראשון ב-14:00") קבע date (YYYY-MM-DD) ו-time (HH:MM) לפי התאריך והשעה שלמעלה. לתזכורת חוזרת ("כל ערב", "כל שבוע", "כל 3 ימים") השתמש בפרמטר repeat (daily/weekly/every_n_days) בקריאה אחת – אל תיצור כמה תזכורות בנפרד. אחרי קביעת תזכורת, ציין בקצרה את התאריך והשעה המדויקים שנקבעו (לפי שעון ישראל). אם מבקשים גם להוסיף משימה וגם להזכיר לפניה ("ותזכיר לי X דקות לפני") – קבע למשימה due_date+due_time והעבר ל-add_tasks גם reminder_minutes_before, בלי לקרוא בנוסף ל-add_reminder על אותה תזכורת.
 
+${coursesBlock}
 פנה למשתמש בלשון ניטרלית בלבד: שם פועל ("להתחיל בפתיחת המצגת") או ניסוח כללי. בלי לשון זכר או נקבה ("התחל" / "התחילי").
 
 המשתמש מתמודד עם ADHD, לכן:
@@ -793,7 +801,7 @@ interface PendingState {
 }
 
 async function buildCtx(scope: AgentScope): Promise<Ctx> {
-  const allSpaces = await listSpaces();
+  const [allSpaces, courses] = await Promise.all([listSpaces(), getStudyCourses()]);
   const single = scope.type === "space" ? (allSpaces.find((s) => s.id === scope.spaceId) ?? null) : null;
   return {
     allSpaces,
@@ -801,6 +809,7 @@ async function buildCtx(scope: AgentScope): Promise<Ctx> {
     scopeSpaces: single ? [single] : allSpaces,
     today: todayISO(),
     now: nowHHMM(),
+    courses,
   };
 }
 

@@ -230,6 +230,24 @@ export async function getSettings(): Promise<Settings> {
   return { dashboard_spaces: Array.isArray(v) ? (v as number[]) : null };
 }
 
+/**
+ * The user's university courses (full names), kept in settings under `study_courses`.
+ * The agent uses them to file an assignment under the right course.
+ */
+export async function getStudyCourses(): Promise<string[]> {
+  await ensureSchema();
+  const rows = await sql()`select value from ts_settings where key = 'study_courses'`;
+  let v = rows[0]?.value;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      v = null;
+    }
+  }
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : [];
+}
+
 export async function setDashboardSpaces(ids: number[] | null): Promise<void> {
   await ensureSchema();
   const db = sql();
