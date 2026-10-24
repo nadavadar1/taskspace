@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Layers, LogOut, Plus } from "lucide-react";
+import { CalendarDays, LayoutDashboard, Layers, LogOut, Plus } from "lucide-react";
 import { useData } from "./DataProvider";
 import { Toasts, cn } from "./ui";
 import { TaskDialog } from "./TaskDialog";
@@ -51,6 +51,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <LayoutDashboard size={15} />
               דשבורד
+            </Link>
+            <Link
+              href="/calendar"
+              data-active={pathname === "/calendar"}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium transition",
+                pathname === "/calendar" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              <CalendarDays size={15} />
+              יומן
             </Link>
             {spaces.map((s) => {
               const active = pathname === `/space/${s.id}`;
