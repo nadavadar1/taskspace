@@ -13,6 +13,7 @@ export const PATCH = guarded<Ctx>(async (req, ctx) => {
   if (typeof body.priority === "string") patch.priority = body.priority;
   if (typeof body.status === "string") patch.status = body.status;
   if (body.due_date === null || typeof body.due_date === "string") patch.due_date = body.due_date;
+  if (body.due_time === null || typeof body.due_time === "string") patch.due_time = body.due_time;
   if (typeof body.space_id === "number") patch.space_id = body.space_id;
   if (typeof body.position === "number") patch.position = body.position;
   const task = await updateTask(id, patch);

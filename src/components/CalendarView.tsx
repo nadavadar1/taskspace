@@ -39,6 +39,7 @@ function Chip({ task, onOpen, floating }: { task: Task; onOpen?: () => void; flo
       title={task.title}
     >
       <StatusIcon status={task.status} size={11} />
+      {task.due_time && <span className="shrink-0 font-semibold opacity-80">{task.due_time}</span>}
       <span className={cn("truncate", done && "line-through")}>{task.title}</span>
     </div>
   );

@@ -2,10 +2,23 @@ import "server-only";
 import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
 import { ensureSchema, sql } from "./db";
-import { addDays, diffDays, formatLong, HE_DAYS, isISO, startOfWeek, todayISO } from "./dates";
+import {
+  addDays,
+  diffDays,
+  formatLong,
+  HE_DAYS,
+  isHHMM,
+  isISO,
+  nowHHMM,
+  startOfWeek,
+  todayISO,
+  utcToZoned,
+  zonedToUtcISO,
+} from "./dates";
 import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP } from "./constants";
-import { createTask, deleteTasks, listSpaces, listTasks, updateTask } from "./store";
-import type { AgentResponse, AgentScope, PendingInfo, Priority, Space, Status, Task } from "./types";
+import { createTask, deleteTasks, getTask, listSpaces, listTasks, updateTask } from "./store";
+import { createReminder, deleteReminders, listReminders, listRemindersByIds } from "./reminders";
+import type { AgentResponse, AgentScope, PendingInfo, Priority, RepeatKind, Space, Status, Task } from "./types";
 
 type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
@@ -15,6 +28,7 @@ interface Ctx {
   scopeSpaces: Space[];
   single: Space | null;
   today: string;
+  now: string; // HH:MM, Israel time
 }
 
 interface Out {
@@ -43,19 +57,20 @@ function systemPrompt(ctx: Ctx): string {
     : `הבחירה הנוכחית: כל המרחבים (${ctx.scopeSpaces.map((s) => `"${s.name}"`).join(", ") || "אין מרחבים"}).`;
   return `אתה "עוזר המשימות" – סוכן AI שמובנה בתוך מערכת אישית לניהול משימות. אתה עובד בעברית בלבד.
 
-היום: יום ${dow}, ${ctx.today} (שעון ישראל). השבוע מתחיל ביום ראשון.
+היום: יום ${dow}, ${ctx.today}. השעה עכשיו: ${ctx.now} (שעון ישראל). השבוע מתחיל ביום ראשון.
 ${scopeLine}
 
 כללי עבודה:
-1. תמיד תשתמש בכלים כדי לקרוא או לשנות משימות. לעולם אל תמציא משימות, מספרים או תאריכים.
+1. תמיד תשתמש בכלים כדי לקרוא או לשנות משימות ותזכורות. לעולם אל תמציא משימות, מספרים או תאריכים.
 2. לפני עדכון או מחיקה של משימה לפי שם – קרא קודם עם get_tasks כדי לקבל את המזהה (id).
-3. אל תבקש אישור בעצמך. כשצריך (פעולה על יותר מ-3 משימות או מחיקה) המערכת מציגה למשתמש כפתורי אישור/ביטול. אתה פשוט קורא לכלי.
-4. אם חסר פרט מהותי (למשל לאיזה מרחב להוסיף, כשנבחרו כל המרחבים) – שאל שאלה קצרה אחת.
+3. אל תבקש אישור בעצמך. כשצריך (פעולה על יותר מ-3 משימות, מחיקת משימות או מחיקת תזכורת) המערכת מציגה למשתמש כפתורי אישור/ביטול. אתה פשוט קורא לכלי.
+4. אם חסר פרט מהותי (למשל לאיזה מרחב להוסיף, כשנבחרו כל המרחבים, או שעה לא ברורה לתזכורת) – שאל שאלה קצרה אחת ותו לא.
 5. תאריכים: המר ביטויים כמו "מחר", "יום חמישי הקרוב", "עד ה-10" לתאריך YYYY-MM-DD לפי היום שלמעלה. "עד ה-10" = ה-10 בחודש הקרוב שעוד לא עבר (החודש אם עוד לא עבר, אחרת החודש הבא).
 6. עדיפות ברירת מחדל: medium. "דחוף" = urgent, "חשוב" = high.
 7. אחרי כל פעולה – ענה במשפט או שניים: מה בוצע, עם מספרים. בלי חזרה על כל הפרטים.
 8. בתשובות תשתמש בשמות בעברית (חדשה, בעבודה, בהשהייה, הושלמה; נמוכה, בינונית, גבוהה, דחוף) ולא בערכים באנגלית.
 9. פורמט: טקסט פשוט. מותר **הדגשה** ורשימות שמתחילות ב"- ". בלי טבלאות ובלי כותרות.
+10. תזכורות: ל"עוד X דקות/שעות" השתמש בפרמטר in_minutes (יחסי מהרגע הזה). לזמן מוחלט ("מחר ב-9", "ביום ראשון ב-14:00") קבע date (YYYY-MM-DD) ו-time (HH:MM) לפי התאריך והשעה שלמעלה. לתזכורת חוזרת ("כל ערב", "כל שבוע", "כל 3 ימים") השתמש בפרמטר repeat (daily/weekly/every_n_days) בקריאה אחת – אל תיצור כמה תזכורות בנפרד. אחרי קביעת תזכורת, ציין בקצרה את התאריך והשעה המדויקים שנקבעו (לפי שעון ישראל). אם מבקשים גם להוסיף משימה וגם להזכיר לפניה ("ותזכיר לי X דקות לפני") – קבע למשימה due_date+due_time והעבר ל-add_tasks גם reminder_minutes_before, בלי לקרוא בנוסף ל-add_reminder על אותה תזכורת.
 
 פנה למשתמש בלשון ניטרלית בלבד: שם פועל ("להתחיל בפתיחת המצגת") או ניסוח כללי. בלי לשון זכר או נקבה ("התחל" / "התחילי").
 
@@ -114,6 +129,12 @@ const TOOLS = [
                 priority: { type: "string", enum: PRIORITY_KEYS },
                 status: { type: "string", enum: STATUS_KEYS },
                 due_date: { type: "string", description: "YYYY-MM-DD" },
+                due_time: { type: "string", description: "HH:MM, Israel time. Only meaningful together with due_date." },
+                reminder_minutes_before: {
+                  type: "integer",
+                  description:
+                    "If set (and due_date+due_time are set), also creates a one-off reminder this many minutes before the due date/time.",
+                },
                 description: { type: "string" },
               },
               required: ["title"],
@@ -142,7 +163,8 @@ const TOOLS = [
               description: { type: "string" },
               status: { type: "string", enum: STATUS_KEYS },
               priority: { type: "string", enum: PRIORITY_KEYS },
-              due_date: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear" },
+              due_date: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear (also clears due_time)" },
+              due_time: { type: ["string", "null"], description: "HH:MM, Israel time, or null to clear" },
               shift_days: { type: "integer", description: "Move the due date by N days (negative = earlier)" },
               space: { type: "string", description: "Move to this space (name)" },
             },
@@ -182,6 +204,54 @@ const TOOLS = [
       description:
         "ADHD-friendly daily summary: a short focus list (top 3 to do first), what is overdue, what is due today, what's coming up and quick wins. Use for 'what should I do now', 'daily summary', 'where do I start'.",
       parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_reminder",
+      description:
+        "Create one reminder (optionally linked to a task, and optionally repeating). Resolve the exact fire time yourself: use in_minutes for 'in N minutes/hours' phrasing, or date+time for an absolute point ('tomorrow at 9', 'Sunday at 14:00').",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "integer", description: "Link this reminder to an existing task (use get_tasks to resolve the id by name first)." },
+          title: { type: "string", description: "Required unless task_id is given, in which case it defaults to the task's title." },
+          in_minutes: { type: "integer", description: "Fire this many minutes from right now. Use for relative phrasing like 'in two hours'." },
+          date: { type: "string", description: "YYYY-MM-DD, Israel time. Use together with 'time' for an absolute date/time." },
+          time: { type: "string", description: "HH:MM, Israel time. Required together with 'date'." },
+          repeat: { type: "string", enum: ["none", "daily", "weekly", "every_n_days"], description: "Default none." },
+          repeat_n: { type: "integer", description: "Required when repeat is every_n_days: repeat every N days." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_reminders",
+      description: "List reminders, optionally only the ones linked to a given task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "integer" },
+          include_disabled: { type: "boolean", description: "Include one-off reminders already sent. Default false." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_reminder",
+      description: "Delete one or more reminders by id. The user will be asked to confirm.",
+      parameters: {
+        type: "object",
+        properties: {
+          reminder_ids: { type: "array", items: { type: "integer" } },
+        },
+        required: ["reminder_ids"],
+      },
     },
   },
 ];
@@ -300,6 +370,7 @@ function compact(t: Task, ctx: Ctx) {
     priority: PRIORITY_MAP[t.priority].label,
     status: STATUS_MAP[t.status].label,
     due_date: t.due_date,
+    due_time: t.due_time,
     overdue: !!t.due_date && t.due_date < ctx.today && t.status !== "done",
   };
 }
@@ -402,6 +473,21 @@ async function prepare(name: string, raw: Record<string, unknown>, ctx: Ctx): Pr
       },
     };
   }
+  if (name === "delete_reminder") {
+    const ids = Array.isArray(raw.reminder_ids) ? (raw.reminder_ids as unknown[]).map(Number).filter(Number.isInteger) : [];
+    if (!ids.length) return { args: raw, error: "reminder_ids is empty" };
+    const reminders = await listRemindersByIds(ids);
+    if (!reminders.length) return { args: raw, error: "None of the given reminder_ids exist." };
+    return {
+      args: { reminder_ids: reminders.map((r) => r.id) },
+      confirm: {
+        title: reminders.length === 1 ? "למחוק תזכורת אחת?" : `למחוק ${reminders.length} תזכורות?`,
+        count: reminders.length,
+        items: titlesPreview(reminders),
+        destructive: true,
+      },
+    };
+  }
   return { args: raw };
 }
 
@@ -428,6 +514,7 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
       const list = Array.isArray(args.tasks) ? (args.tasks as Record<string, unknown>[]) : [];
       const created: ReturnType<typeof compact>[] = [];
       const errors: string[] = [];
+      let remindersCreated = 0;
       for (const item of list) {
         const title = String(item.title ?? "").trim();
         if (!title) continue;
@@ -436,19 +523,32 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
           errors.push(`"${title}": ${sp.error}`);
           continue;
         }
+        const dueDate = isISO(item.due_date) ? item.due_date : null;
+        const dueTime = dueDate && isHHMM(item.due_time) ? item.due_time : null;
         const t = await createTask({
           space_id: sp.space.id,
           title,
           description: typeof item.description === "string" ? item.description : "",
           priority: typeof item.priority === "string" ? item.priority : "medium",
           status: typeof item.status === "string" ? item.status : "new",
-          due_date: isISO(item.due_date) ? item.due_date : null,
+          due_date: dueDate,
+          due_time: dueTime,
         });
         created.push(compact(t, ctx));
+        const minutesBefore = Number(item.reminder_minutes_before);
+        if (t.due_date && t.due_time && Number.isFinite(minutesBefore) && minutesBefore >= 0) {
+          const dueAt = zonedToUtcISO(t.due_date, t.due_time);
+          const remindAt = new Date(new Date(dueAt).getTime() - minutesBefore * 60000).toISOString();
+          await createReminder({ task_id: t.id, title: t.title, remind_at: remindAt });
+          remindersCreated++;
+        }
       }
       if (created.length) {
         out.mutated = true;
         out.actions.push(created.length === 1 ? "נוספה משימה אחת" : `נוספו ${created.length} משימות`);
+      }
+      if (remindersCreated) {
+        out.actions.push(remindersCreated === 1 ? "נקבעה תזכורת אחת" : `נקבעו ${remindersCreated} תזכורות`);
       }
       return { added: created.length, tasks: created, errors };
     }
@@ -466,6 +566,9 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
       if (changes.due_date !== undefined && changes.due_date !== null && !isISO(changes.due_date)) {
         return { error: "due_date must be YYYY-MM-DD or null" };
       }
+      if (changes.due_time !== undefined && changes.due_time !== null && !isHHMM(changes.due_time)) {
+        return { error: "due_time must be HH:MM or null" };
+      }
       const updated: ReturnType<typeof compact>[] = [];
       for (const t of r.tasks!) {
         const patch: Record<string, unknown> = {};
@@ -477,6 +580,7 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
         else if (typeof changes.shift_days === "number") {
           patch.due_date = addDays(t.due_date ?? ctx.today, Math.trunc(changes.shift_days));
         }
+        if (changes.due_time !== undefined) patch.due_time = changes.due_time;
         if (targetSpace) patch.space_id = targetSpace.id;
         const nt = await updateTask(t.id, patch);
         if (nt) updated.push(compact(nt, ctx));
@@ -495,6 +599,71 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
       if (n) {
         out.mutated = true;
         out.actions.push(n === 1 ? "נמחקה משימה אחת" : `נמחקו ${n} משימות`);
+      }
+      return { deleted: n };
+    }
+
+    case "add_reminder": {
+      let title = typeof args.title === "string" ? args.title.trim() : "";
+      let taskId: number | null = null;
+      if (Number.isInteger(args.task_id)) {
+        const task = await getTask(Number(args.task_id));
+        if (!task) return { error: `Task ${args.task_id} not found.` };
+        taskId = task.id;
+        if (!title) title = task.title;
+      }
+      if (!title) return { error: "title is required when task_id is not given" };
+
+      let remindAt: string;
+      if (Number.isInteger(args.in_minutes)) {
+        remindAt = new Date(Date.now() + Number(args.in_minutes) * 60000).toISOString();
+      } else if (isISO(args.date) && isHHMM(args.time)) {
+        remindAt = zonedToUtcISO(args.date as string, args.time as string);
+      } else {
+        return { error: "Provide either in_minutes, or both date (YYYY-MM-DD) and time (HH:MM)." };
+      }
+
+      const repeat = (typeof args.repeat === "string" ? args.repeat : "none") as RepeatKind;
+      if (!["none", "daily", "weekly", "every_n_days"].includes(repeat)) {
+        return { error: "repeat must be none/daily/weekly/every_n_days" };
+      }
+      if (repeat === "every_n_days" && !(Number.isInteger(args.repeat_n) && Number(args.repeat_n) > 0)) {
+        return { error: "repeat_n (a positive integer) is required when repeat is every_n_days" };
+      }
+
+      const r = await createReminder({
+        task_id: taskId,
+        title,
+        remind_at: remindAt,
+        repeat,
+        repeat_n: repeat === "every_n_days" ? Number(args.repeat_n) : null,
+      });
+      out.mutated = true;
+      const z = utcToZoned(r.remind_at);
+      out.actions.push(`נקבעה תזכורת: ${formatLong(z.date)} בשעה ${z.time}`);
+      return { reminder: { id: r.id, title: r.title, task_id: r.task_id, date: z.date, time: z.time, repeat: r.repeat, repeat_n: r.repeat_n } };
+    }
+
+    case "list_reminders": {
+      const filter: { task_id?: number; enabled?: boolean } = {};
+      if (Number.isInteger(args.task_id)) filter.task_id = Number(args.task_id);
+      if (!args.include_disabled) filter.enabled = true;
+      const reminders = await listReminders(filter);
+      return {
+        count: reminders.length,
+        reminders: reminders.map((r) => {
+          const z = utcToZoned(r.remind_at);
+          return { id: r.id, title: r.title, task_id: r.task_id, date: z.date, time: z.time, repeat: r.repeat, repeat_n: r.repeat_n, enabled: r.enabled };
+        }),
+      };
+    }
+
+    case "delete_reminder": {
+      const ids = Array.isArray(args.reminder_ids) ? (args.reminder_ids as unknown[]).map(Number).filter(Number.isInteger) : [];
+      const n = await deleteReminders(ids);
+      if (n) {
+        out.mutated = true;
+        out.actions.push(n === 1 ? "נמחקה תזכורת אחת" : `נמחקו ${n} תזכורות`);
       }
       return { deleted: n };
     }
@@ -619,6 +788,7 @@ async function buildCtx(scope: AgentScope): Promise<Ctx> {
     single,
     scopeSpaces: single ? [single] : allSpaces,
     today: todayISO(),
+    now: nowHHMM(),
   };
 }
 

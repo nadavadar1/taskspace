@@ -1,11 +1,12 @@
 import "server-only";
 import { ensureSchema, sql } from "./db";
-import { isISO } from "./dates";
+import { isHHMM, isISO } from "./dates";
 import { PRIORITY_KEYS, STATUS_KEYS, VIEW_KEYS } from "./constants";
 import type { Priority, Settings, Space, Status, Task, ViewType } from "./types";
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
-  to_char(due_date, 'YYYY-MM-DD') as due_date, position, created_at, completed_at`;
+  to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
+  position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -16,6 +17,7 @@ function mapTask(r: Record<string, unknown>): Task {
     priority: r.priority as Priority,
     status: r.status as Status,
     due_date: (r.due_date as string | null) ?? null,
+    due_time: (r.due_time as string | null) ?? null,
     position: Number(r.position),
     created_at: new Date(r.created_at as string).toISOString(),
     completed_at: r.completed_at ? new Date(r.completed_at as string).toISOString() : null,
@@ -106,6 +108,7 @@ export interface TaskInput {
   priority?: string;
   status?: string;
   due_date?: string | null;
+  due_time?: string | null;
   position?: number;
 }
 
@@ -117,6 +120,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const priority = PRIORITY_KEYS.includes(input.priority as Priority) ? input.priority! : "medium";
   const status = STATUS_KEYS.includes(input.status as Status) ? input.status! : "new";
   const due = isISO(input.due_date) ? input.due_date : null;
+  const dueTime = due && isHHMM(input.due_time) ? input.due_time : null;
   const description = String(input.description ?? "").slice(0, 4000);
   let position = input.position;
   if (typeof position !== "number" || !Number.isFinite(position)) {
@@ -124,10 +128,10 @@ export async function createTask(input: TaskInput): Promise<Task> {
     position = Number(max) + 1;
   }
   const rows = await db.unsafe(
-    `insert into ts_tasks (space_id, title, description, priority, status, due_date, position, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7, ${status === "done" ? "now()" : "null"})
+    `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
-    [input.space_id, title, description, priority, status, due, position],
+    [input.space_id, title, description, priority, status, due, dueTime, position],
   );
   return mapTask(rows[0]);
 }
@@ -139,6 +143,7 @@ export interface TaskPatch {
   priority?: string;
   status?: string;
   due_date?: string | null;
+  due_time?: string | null;
   position?: number;
 }
 
@@ -156,6 +161,10 @@ export async function updateTask(id: number, patch: TaskPatch): Promise<Task | n
   if (PRIORITY_KEYS.includes(patch.priority as Priority)) push("priority", patch.priority);
   if (patch.due_date === null || isISO(patch.due_date)) {
     if (patch.due_date !== undefined) push("due_date", patch.due_date);
+    if (patch.due_date === null) push("due_time", null); // no date means no time either
+  }
+  if (patch.due_time === null || isHHMM(patch.due_time)) {
+    if (patch.due_time !== undefined && patch.due_date !== null) push("due_time", patch.due_time);
   }
   if (typeof patch.space_id === "number") push("space_id", patch.space_id);
   if (typeof patch.position === "number" && Number.isFinite(patch.position)) push("position", patch.position);

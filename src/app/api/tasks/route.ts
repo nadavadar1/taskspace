@@ -13,6 +13,7 @@ export const POST = guarded(async (req) => {
     priority: typeof body.priority === "string" ? body.priority : undefined,
     status: typeof body.status === "string" ? body.status : undefined,
     due_date: typeof body.due_date === "string" ? body.due_date : null,
+    due_time: typeof body.due_time === "string" ? body.due_time : null,
     position: typeof body.position === "number" ? body.position : undefined,
   });
   return NextResponse.json({ task });

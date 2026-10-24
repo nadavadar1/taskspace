@@ -19,6 +19,7 @@ export function DueLabel({ task, today, className }: { task: Task; today: string
       )}
     >
       {relativeLabel(task.due_date, today)}
+      {task.due_time && <span className="font-normal opacity-80">, {task.due_time}</span>}
     </span>
   );
 }

@@ -7,6 +7,7 @@ import { todayISO } from "@/lib/dates";
 export interface NewTaskDefaults {
   space_id?: number;
   due_date?: string | null;
+  due_time?: string | null;
   status?: Status;
   priority?: Priority;
   title?: string;
