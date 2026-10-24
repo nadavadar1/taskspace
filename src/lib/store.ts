@@ -1,6 +1,5 @@
 import "server-only";
 import { ensureSchema, sql } from "./db";
-import { ValidationError } from "./errors";
 import { isHHMM, isISO } from "./dates";
 import { PRIORITY_KEYS, STATUS_KEYS, VIEW_KEYS } from "./constants";
 import type { Priority, Settings, Space, Status, Task, ViewType } from "./types";
@@ -115,8 +114,6 @@ export interface TaskInput {
   position?: number;
 }
 
-export const NOT_DONE_NEEDS_REASON = "צריך לכתוב למה המשימה לא בוצעה או למה אי אפשר לבצע אותה";
-
 export async function createTask(input: TaskInput): Promise<Task> {
   await ensureSchema();
   const db = sql();
@@ -128,7 +125,6 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const dueTime = due && isHHMM(input.due_time) ? input.due_time : null;
   const description = String(input.description ?? "").slice(0, 4000);
   const note = status === "not_done" ? String(input.status_note ?? "").trim().slice(0, 1000) : "";
-  if (status === "not_done" && !note) throw new ValidationError(NOT_DONE_NEEDS_REASON);
   let position = input.position;
   if (typeof position !== "number" || !Number.isFinite(position)) {
     const [{ max }] = await db`select coalesce(max(position), 0)::float as max from ts_tasks where space_id = ${input.space_id}`;
@@ -158,18 +154,18 @@ export interface TaskPatch {
 export async function updateTask(id: number, patch: TaskPatch): Promise<Task | null> {
   await ensureSchema();
   const db = sql();
-  // "not done" must always come with a reason, so the user can later see why
+  // The note says why a "not done" task wasn't done. It is optional: the user may add it later.
   let statusNote: string | undefined;
   if (patch.status === "not_done") {
-    const given = typeof patch.status_note === "string" ? patch.status_note.trim() : "";
-    statusNote = given || (await getTask(id))?.status_note || "";
-    if (!statusNote) throw new ValidationError(NOT_DONE_NEEDS_REASON);
+    // keep the existing note unless a new one is given
+    statusNote =
+      typeof patch.status_note === "string" ? patch.status_note.trim() : ((await getTask(id))?.status_note ?? "");
     statusNote = statusNote.slice(0, 1000);
   } else if (STATUS_KEYS.includes(patch.status as Status)) {
-    statusNote = ""; // moving to any other status drops the old reason
+    statusNote = ""; // moving to any other status drops the old note
   } else if (typeof patch.status_note === "string") {
     const current = await getTask(id);
-    if (current?.status === "not_done" && patch.status_note.trim()) statusNote = patch.status_note.trim().slice(0, 1000);
+    if (current?.status === "not_done") statusNote = patch.status_note.trim().slice(0, 1000);
   }
   const sets: string[] = [];
   const vals: unknown[] = [];

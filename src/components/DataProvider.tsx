@@ -14,8 +14,7 @@ export interface NewTaskDefaults {
   title?: string;
 }
 
-/** `status` pre-selects a status when the dialog opens (e.g. a card dropped on the "not done" column). */
-type TaskDialogState = { mode: "edit"; id: number; status?: Status } | { mode: "new"; defaults: NewTaskDefaults } | null;
+type TaskDialogState = { mode: "edit"; id: number } | { mode: "new"; defaults: NewTaskDefaults } | null;
 type SpaceDialogState = { mode: "new" } | { mode: "edit"; id: number } | null;
 
 interface Toast {
@@ -52,7 +51,7 @@ interface DataCtx {
   toast: (message: string) => void;
   toasts: Toast[];
   taskDialog: TaskDialogState;
-  openTask: (id: number, status?: Status) => void;
+  openTask: (id: number) => void;
   openNewTask: (defaults?: NewTaskDefaults) => void;
   closeTaskDialog: () => void;
   spaceDialog: SpaceDialogState;
@@ -314,7 +313,7 @@ export function DataProvider({
       toast,
       toasts,
       taskDialog,
-      openTask: (id, status) => setTaskDialog({ mode: "edit", id, status }),
+      openTask: (id) => setTaskDialog({ mode: "edit", id }),
       openNewTask: (defaults = {}) => setTaskDialog({ mode: "new", defaults }),
       closeTaskDialog: () => setTaskDialog(null),
       spaceDialog,

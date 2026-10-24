@@ -42,8 +42,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState(editing?.title ?? defaults.title ?? "");
   const [description, setDescription] = useState(editing?.description ?? "");
   const [priority, setPriority] = useState<Priority>(editing?.priority ?? defaults.priority ?? "medium");
-  const presetStatus = taskDialog?.mode === "edit" ? taskDialog.status : undefined;
-  const [status, setStatus] = useState<Status>(presetStatus ?? editing?.status ?? defaults.status ?? "new");
+  const [status, setStatus] = useState<Status>(editing?.status ?? defaults.status ?? "new");
   const [statusNote, setStatusNote] = useState(editing?.status_note ?? "");
   const [due, setDue] = useState<string>(editing ? (editing.due_date ?? "") : (defaults.due_date ?? ""));
   const [dueTime, setDueTime] = useState<string>(editing ? (editing.due_time ?? "") : (defaults.due_time ?? ""));
@@ -93,10 +92,6 @@ function TaskForm({ onClose }: { onClose: () => void }) {
     }
     if (!spaceId) {
       toast("אין מרחב לשמירה. צור מרחב קודם.");
-      return;
-    }
-    if (status === "not_done" && !statusNote.trim()) {
-      toast("כתוב למה המשימה לא בוצעה או למה אי אפשר לבצע אותה");
       return;
     }
     const noteField = status === "not_done" ? { status_note: statusNote.trim() } : {};
@@ -271,7 +266,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
           {status === "not_done" && (
             <div className="mt-3 rounded-2xl border border-stone-200 bg-stone-50 p-3">
               <label className="mb-1.5 block text-sm font-medium text-stone-700" htmlFor="status-note">
-                למה לא בוצעה, או למה אי אפשר לבצע?
+                הערה: למה לא בוצעה, או למה אי אפשר לבצע?
               </label>
               <textarea
                 id="status-note"
@@ -282,7 +277,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 placeholder="למשל: הקורס נדחה, מחכה לאישור מנמרוד, אין גישה למערכת..."
                 className="w-full resize-none rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
               />
-              <p className="mt-1.5 text-xs text-muted">ההערה מוצגת על המשימה, כדי שתזכור מה קרה.</p>
+              <p className="mt-1.5 text-xs text-muted">לא חובה: אפשר להשאיר ריק ולהוסיף אחר כך. ההערה מוצגת על המשימה.</p>
             </div>
           )}
         </Field>

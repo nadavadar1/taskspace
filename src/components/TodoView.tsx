@@ -68,10 +68,16 @@ function Row({ task }: { task: Task }) {
         <span className={cn("block truncate text-[15px]", done && "text-muted line-through", notDone && "text-muted")}>
           {task.title}
         </span>
-        {notDone && task.status_note && (
+        {notDone && (
           <span className="mt-0.5 block text-xs leading-snug text-stone-500">
-            <span className="font-bold">למה לא: </span>
-            {task.status_note}
+            {task.status_note ? (
+              <>
+                <span className="font-bold">למה לא: </span>
+                {task.status_note}
+              </>
+            ) : (
+              <span className="text-stone-400">אין הערה. לחץ כדי להוסיף למה.</span>
+            )}
           </span>
         )}
       </span>

@@ -1,7 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { isAuthed } from "./auth";
-import { ValidationError } from "./errors";
 
 type Handler<C> = (req: Request, ctx: C) => Promise<Response>;
 
@@ -14,9 +13,6 @@ export function guarded<C = unknown>(fn: Handler<C>): Handler<C> {
     try {
       return await fn(req, ctx);
     } catch (e) {
-      if (e instanceof ValidationError) {
-        return NextResponse.json({ error: e.message }, { status: 400 });
-      }
       console.error("[api]", e);
       const message = e instanceof Error ? e.message : "שגיאה לא צפויה";
       return NextResponse.json({ error: message }, { status: 500 });

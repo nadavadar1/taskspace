@@ -153,7 +153,7 @@ const TOOLS = [
     function: {
       name: "update_tasks",
       description:
-        "Update existing tasks. Target them with task_ids OR a filter (an empty filter {} means all open tasks in the selection). Apply the same changes to every target. Status 'not_done' means the task was not done or cannot be done: it ALWAYS needs changes.status_note with the reason, so if the user did not say why, ask one short question first and do not call this tool yet.",
+        "Update existing tasks. Target them with task_ids OR a filter (an empty filter {} means all open tasks in the selection). Apply the same changes to every target. Status 'not_done' means the task was not done or cannot be done: just set it. NEVER ask the user why - they write the reason themselves in the task's note. Only if they already said a reason in the same message, copy it to changes.status_note.",
       parameters: {
         type: "object",
         properties: {
@@ -167,7 +167,7 @@ const TOOLS = [
               status: { type: "string", enum: STATUS_KEYS },
               status_note: {
                 type: "string",
-                description: "Required with status 'not_done': a short reason in Hebrew, in the user's words, why it wasn't done or can't be done.",
+                description: "Optional, only with status 'not_done': the reason, in the user's own words, if (and only if) they stated one. Leave it out otherwise; never ask for it.",
               },
               priority: { type: "string", enum: PRIORITY_KEYS },
               due_date: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear (also clears due_time)" },
@@ -578,12 +578,6 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
       }
       if (changes.due_time !== undefined && changes.due_time !== null && !isHHMM(changes.due_time)) {
         return { error: "due_time must be HH:MM or null" };
-      }
-      if (changes.status === "not_done") {
-        const reason = typeof changes.status_note === "string" ? changes.status_note.trim() : "";
-        if (!reason && r.tasks!.some((t) => !t.status_note)) {
-          return { error: "status_note is required for 'not_done'. Ask the user, in one short question, why the task wasn't done or can't be done." };
-        }
       }
       const updated: ReturnType<typeof compact>[] = [];
       for (const t of r.tasks!) {

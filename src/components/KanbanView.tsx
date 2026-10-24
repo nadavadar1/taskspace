@@ -84,7 +84,7 @@ function Column({
         </SortableContext>
         {tasks.length === 0 && (
           <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-300 py-6 text-xs text-muted">
-            {status.key === "not_done" ? "גרור לכאן משימה שלא בוצעה ותכתוב למה" : "גרור לכאן משימה"}
+            {status.key === "not_done" ? "גרור לכאן משימה שלא בוצעה" : "גרור לכאן משימה"}
           </div>
         )}
       </div>
@@ -151,11 +151,6 @@ export function KanbanView({ space }: { space: Space }) {
     else position = 1;
 
     if (targetStatus === task.status && Math.abs(position - task.position) < 1e-9) return;
-    // "not done" needs a reason: open the task with that status chosen instead of moving the card blindly
-    if (targetStatus === "not_done" && task.status !== "not_done") {
-      openTask(id, "not_done");
-      return;
-    }
     void patchTask(id, { status: targetStatus, position });
   }
 

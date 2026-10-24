@@ -63,10 +63,16 @@ export function TaskCard({
           <div className={cn("text-sm font-medium leading-snug", done && "text-muted line-through", notDone && "text-muted")}>
             {task.title}
           </div>
-          {notDone && task.status_note && (
+          {notDone && (
             <div className="mt-1.5 rounded-lg bg-stone-100 px-2 py-1 text-xs leading-snug text-stone-600">
-              <span className="font-bold">למה לא: </span>
-              {task.status_note}
+              {task.status_note ? (
+                <>
+                  <span className="font-bold">למה לא: </span>
+                  {task.status_note}
+                </>
+              ) : (
+                <span className="text-stone-400">אין הערה. לחץ כדי להוסיף למה.</span>
+              )}
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
