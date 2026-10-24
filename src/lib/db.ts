@@ -47,6 +47,7 @@ async function init(): Promise<void> {
       created_at timestamptz not null default now(),
       completed_at timestamptz
     )`;
+  await db`alter table ts_tasks add column if not exists due_time time`;
   await db`create index if not exists ts_tasks_space_idx on ts_tasks(space_id)`;
   await db`
     create table if not exists ts_settings (
@@ -57,6 +58,28 @@ async function init(): Promise<void> {
     create table if not exists ts_agent_pending (
       id text primary key,
       state jsonb not null,
+      created_at timestamptz not null default now()
+    )`;
+  await db`
+    create table if not exists ts_reminders (
+      id serial primary key,
+      task_id integer references ts_tasks(id) on delete cascade,
+      title text not null,
+      remind_at timestamptz not null,
+      repeat text not null default 'none',
+      repeat_n integer,
+      last_sent_at timestamptz,
+      enabled boolean not null default true,
+      created_at timestamptz not null default now()
+    )`;
+  await db`create index if not exists ts_reminders_due_idx on ts_reminders(remind_at) where enabled`;
+  await db`create index if not exists ts_reminders_task_idx on ts_reminders(task_id)`;
+  await db`
+    create table if not exists ts_push_subscriptions (
+      id serial primary key,
+      endpoint text not null unique,
+      p256dh text not null,
+      auth text not null,
       created_at timestamptz not null default now()
     )`;
   await seedIfEmpty();

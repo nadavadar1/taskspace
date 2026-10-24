@@ -9,6 +9,7 @@ import { Toasts, cn } from "./ui";
 import { TaskDialog } from "./TaskDialog";
 import { SpaceDialog } from "./SpaceDialog";
 import { ChatWidget } from "./ChatWidget";
+import { NotificationsButton } from "./NotificationsButton";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { spaces, openSpaceDialog, toasts } = useData();
@@ -80,6 +81,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               מרחב חדש
             </button>
           </nav>
+
+          <NotificationsButton />
 
           <button
             onClick={logout}

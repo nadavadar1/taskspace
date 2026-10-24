@@ -28,6 +28,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [priority, setPriority] = useState<Priority>(editing?.priority ?? defaults.priority ?? "medium");
   const [status, setStatus] = useState<Status>(editing?.status ?? defaults.status ?? "new");
   const [due, setDue] = useState<string>(editing ? (editing.due_date ?? "") : (defaults.due_date ?? ""));
+  const [dueTime, setDueTime] = useState<string>(editing ? (editing.due_time ?? "") : (defaults.due_time ?? ""));
   const [spaceId, setSpaceId] = useState<number | undefined>(
     editing?.space_id ?? defaults.space_id ?? spaces[0]?.id,
   );
@@ -37,6 +38,11 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     setConfirmDelete(false);
   }, [title]);
+
+  function changeDue(v: string) {
+    setDue(v);
+    if (!v) setDueTime("");
+  }
 
   const quickDates = useMemo(
     () => [
@@ -64,6 +70,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         priority,
         status,
         due_date: due || null,
+        due_time: due && dueTime ? dueTime : null,
         space_id: spaceId,
       });
     } else {
@@ -74,6 +81,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         priority,
         status,
         due_date: due || null,
+        due_time: due && dueTime ? dueTime : null,
       });
     }
     setBusy(false);
@@ -185,18 +193,28 @@ function TaskForm({ onClose }: { onClose: () => void }) {
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="תאריך יעד">
-            <input
-              type="date"
-              value={due}
-              onChange={(e) => setDue(e.target.value)}
-              className="w-full rounded-xl border border-line px-3 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
-            />
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={due}
+                onChange={(e) => changeDue(e.target.value)}
+                className="w-full rounded-xl border border-line px-3 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+              />
+              <input
+                type="time"
+                value={dueTime}
+                disabled={!due}
+                onChange={(e) => setDueTime(e.target.value)}
+                className="w-28 shrink-0 rounded-xl border border-line px-2 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100 disabled:opacity-40"
+                aria-label="שעה"
+              />
+            </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {quickDates.map((q) => (
                 <button
                   key={q.label}
                   type="button"
-                  onClick={() => setDue(q.value)}
+                  onClick={() => changeDue(q.value)}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-medium transition",
                     due === q.value ? "bg-primary text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
@@ -208,7 +226,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
               {due && (
                 <button
                   type="button"
-                  onClick={() => setDue("")}
+                  onClick={() => changeDue("")}
                   className="rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
                 >
                   ללא תאריך

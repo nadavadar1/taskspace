@@ -31,6 +31,59 @@ export function isISO(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 }
 
+export function isHHMM(s: unknown): s is string {
+  return typeof s === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+}
+
+/** Current time (HH:MM) in Israel time. */
+export function nowHHMM(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+}
+
+function tzOffsetMinutes(date: Date, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const p: Record<string, string> = {};
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
+  const hour = p.hour === "24" ? 0 : Number(p.hour);
+  const asUTC = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), hour, Number(p.minute), Number(p.second));
+  return (asUTC - date.getTime()) / 60000;
+}
+
+/** Combine a YYYY-MM-DD date and HH:MM time, both read as Israel wall-clock time, into a UTC ISO timestamp. */
+export function zonedToUtcISO(dateISO: string, timeHHMM: string, timeZone: string = TZ): string {
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const [hh, mm] = timeHHMM.split(":").map(Number);
+  const guess = new Date(Date.UTC(y, m - 1, d, hh, mm, 0));
+  const offset = tzOffsetMinutes(guess, timeZone);
+  let utc = new Date(guess.getTime() - offset * 60000);
+  const offset2 = tzOffsetMinutes(utc, timeZone);
+  if (offset2 !== offset) utc = new Date(guess.getTime() - offset2 * 60000);
+  return utc.toISOString();
+}
+
+/** The Israel-local date (YYYY-MM-DD) and time (HH:MM) for a UTC instant. */
+export function utcToZoned(iso: string, timeZone: string = TZ): { date: string; time: string } {
+  const d = new Date(iso);
+  return {
+    date: todayISO(d),
+    time: new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(d),
+  };
+}
+
 function toUTC(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d));

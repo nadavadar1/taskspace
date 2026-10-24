@@ -18,6 +18,7 @@ export interface Task {
   priority: Priority;
   status: Status;
   due_date: string | null; // YYYY-MM-DD
+  due_time: string | null; // HH:MM, Israel time
   position: number;
   created_at: string;
   completed_at: string | null;
@@ -25,6 +26,28 @@ export interface Task {
 
 export interface Settings {
   dashboard_spaces: number[] | null; // null = all
+}
+
+export type RepeatKind = "none" | "daily" | "weekly" | "every_n_days";
+
+export interface Reminder {
+  id: number;
+  task_id: number | null;
+  title: string;
+  remind_at: string; // ISO timestamp (UTC)
+  repeat: RepeatKind;
+  repeat_n: number | null; // only meaningful when repeat === "every_n_days"
+  last_sent_at: string | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface PushSubscriptionRecord {
+  id: number;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
 }
 
 export type AgentScope = { type: "all" } | { type: "space"; spaceId: number };
