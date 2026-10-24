@@ -220,7 +220,7 @@ const TOOLS = [
           in_minutes: { type: "integer", description: "Fire this many minutes from right now. Use for relative phrasing like 'in two hours'." },
           date: { type: "string", description: "YYYY-MM-DD, Israel time. Use together with 'time' for an absolute date/time." },
           time: { type: "string", description: "HH:MM, Israel time. Required together with 'date'." },
-          repeat: { type: "string", enum: ["none", "daily", "weekly", "every_n_days"], description: "Default none." },
+          repeat: { type: "string", enum: ["none", "hourly", "daily", "weekly", "every_n_days"], description: "Default none." },
           repeat_n: { type: "integer", description: "Required when repeat is every_n_days: repeat every N days." },
         },
       },
@@ -624,8 +624,8 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
       }
 
       const repeat = (typeof args.repeat === "string" ? args.repeat : "none") as RepeatKind;
-      if (!["none", "daily", "weekly", "every_n_days"].includes(repeat)) {
-        return { error: "repeat must be none/daily/weekly/every_n_days" };
+      if (!["none", "hourly", "daily", "weekly", "every_n_days"].includes(repeat)) {
+        return { error: "repeat must be none/hourly/daily/weekly/every_n_days" };
       }
       if (repeat === "every_n_days" && !(Number.isInteger(args.repeat_n) && Number(args.repeat_n) > 0)) {
         return { error: "repeat_n (a positive integer) is required when repeat is every_n_days" };

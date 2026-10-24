@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { PRIORITY_MAP, STATUS_MAP } from "@/lib/constants";
 import type { Priority, Status } from "@/lib/types";
 
 export function cn(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
+}
+
+const noopSubscribe = () => () => {};
+
+/** False during server rendering and hydration, true afterwards. Used for widgets whose generated ids differ between server and client (dnd-kit). */
+export function useMounted(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
 }
 
 export function Modal({

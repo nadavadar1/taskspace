@@ -177,6 +177,10 @@ export async function updateTask(id: number, patch: TaskPatch): Promise<Task | n
     vals.push(id);
     await db.unsafe(`update ts_tasks set ${sets.join(", ")} where id = $${vals.length}`, vals as never[]);
   }
+  // a finished task stops nagging: switch off its open reminders (re-opening the task doesn't bring them back)
+  if (patch.status === "done") {
+    await db`update ts_reminders set enabled = false where task_id = ${id} and enabled`;
+  }
   return getTask(id);
 }
 

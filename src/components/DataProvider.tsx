@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { Priority, Settings, Space, Status, Task, ViewType } from "@/lib/types";
+import type { Priority, Reminder, RepeatKind, Settings, Space, Status, Task, ViewType } from "@/lib/types";
 import { todayISO } from "@/lib/dates";
 
 export interface NewTaskDefaults {
@@ -21,12 +21,23 @@ interface Toast {
   message: string;
 }
 
+export interface TaskReminderInput {
+  date: string; // YYYY-MM-DD, Israel time
+  time: string; // HH:MM, Israel time
+  repeat: RepeatKind;
+  repeat_n?: number | null;
+}
+
 interface DataCtx {
   spaces: Space[];
   tasks: Task[];
+  /** Enabled reminders only. */
+  reminders: Reminder[];
   settings: Settings;
   today: string;
   refresh: () => Promise<void>;
+  saveTaskReminder: (taskId: number, input: TaskReminderInput) => Promise<boolean>;
+  removeTaskReminder: (taskId: number) => Promise<void>;
   addTask: (input: NewTaskDefaults & { space_id: number; title: string; description?: string }) => Promise<Task | null>;
   patchTask: (id: number, patch: Partial<Task>) => Promise<void>;
   removeTask: (id: number) => Promise<void>;
@@ -85,11 +96,12 @@ export function DataProvider({
   initial,
   children,
 }: {
-  initial: { spaces: Space[]; tasks: Task[]; settings: Settings };
+  initial: { spaces: Space[]; tasks: Task[]; settings: Settings; reminders: Reminder[] };
   children: React.ReactNode;
 }) {
   const [spaces, setSpaces] = useState<Space[]>(initial.spaces);
   const [tasks, setTasks] = useState<Task[]>(initial.tasks);
+  const [reminders, setReminders] = useState<Reminder[]>(initial.reminders);
   const [settings, setSettings] = useState<Settings>(initial.settings);
   const [today, setToday] = useState(() => todayISO());
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -112,10 +124,14 @@ export function DataProvider({
 
   const refresh = useCallback(async () => {
     try {
-      const data = await request<{ spaces: Space[]; tasks: Task[]; settings: Settings }>("/api/bootstrap", "GET");
+      const data = await request<{ spaces: Space[]; tasks: Task[]; settings: Settings; reminders: Reminder[] }>(
+        "/api/bootstrap",
+        "GET",
+      );
       setSpaces(data.spaces);
       setTasks(data.tasks);
       setSettings(data.settings);
+      setReminders(data.reminders ?? []);
     } catch {
       /* keep what we have */
     }
@@ -155,9 +171,37 @@ export function DataProvider({
       try {
         const { task } = await request<{ task: Task }>(`/api/tasks/${id}`, "PATCH", patch);
         setTasks((list) => list.map((t) => (t.id === id ? task : t)));
+        // the server switches off the reminders of a task that is marked done
+        if (patch.status === "done") setReminders((list) => list.filter((r) => r.task_id !== id));
       } catch (e) {
         if (before) setTasks((list) => list.map((t) => (t.id === id ? before! : t)));
         toast(e instanceof Error ? e.message : "העדכון נכשל");
+      }
+    },
+    [toast],
+  );
+
+  const saveTaskReminder = useCallback<DataCtx["saveTaskReminder"]>(
+    async (taskId, input) => {
+      try {
+        const { reminder } = await request<{ reminder: Reminder }>(`/api/tasks/${taskId}/reminder`, "POST", input);
+        setReminders((list) => [...list.filter((r) => r.id !== reminder.id), reminder]);
+        return true;
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "שמירת התזכורת נכשלה");
+        return false;
+      }
+    },
+    [toast],
+  );
+
+  const removeTaskReminder = useCallback<DataCtx["removeTaskReminder"]>(
+    async (taskId) => {
+      try {
+        const { id } = await request<{ id: number | null }>(`/api/tasks/${taskId}/reminder`, "DELETE");
+        if (id !== null) setReminders((list) => list.filter((r) => r.id !== id));
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "מחיקת התזכורת נכשלה");
       }
     },
     [toast],
@@ -172,6 +216,7 @@ export function DataProvider({
       });
       try {
         await request(`/api/tasks/${id}`, "DELETE");
+        setReminders((list) => list.filter((r) => r.task_id !== id));
       } catch (e) {
         if (removed) setTasks((list) => [...list, removed!]);
         toast(e instanceof Error ? e.message : "המחיקה נכשלה");
@@ -221,11 +266,13 @@ export function DataProvider({
         await request(`/api/spaces/${id}`, "DELETE");
         setSpaces((s) => s.filter((x) => x.id !== id));
         setTasks((t) => t.filter((x) => x.space_id !== id));
+        // refresh drops the reminders of the deleted space's tasks
+        void refresh();
       } catch (e) {
         toast(e instanceof Error ? e.message : "המחיקה נכשלה");
       }
     },
-    [toast],
+    [toast, refresh],
   );
 
   const setDashboardSpaces = useCallback(
@@ -245,9 +292,12 @@ export function DataProvider({
     () => ({
       spaces,
       tasks,
+      reminders,
       settings,
       today,
       refresh,
+      saveTaskReminder,
+      removeTaskReminder,
       addTask,
       patchTask,
       removeTask,
@@ -273,9 +323,12 @@ export function DataProvider({
     [
       spaces,
       tasks,
+      reminders,
       settings,
       today,
       refresh,
+      saveTaskReminder,
+      removeTaskReminder,
       addTask,
       patchTask,
       removeTask,

@@ -28,7 +28,7 @@ export interface Settings {
   dashboard_spaces: number[] | null; // null = all
 }
 
-export type RepeatKind = "none" | "daily" | "weekly" | "every_n_days";
+export type RepeatKind = "none" | "hourly" | "daily" | "weekly" | "every_n_days";
 
 export interface Reminder {
   id: number;

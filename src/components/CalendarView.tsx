@@ -12,16 +12,30 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useData } from "./DataProvider";
 import { cn, StatusIcon } from "./ui";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { HE_DAYS, HE_MONTHS, monthGrid, parts, formatLong } from "@/lib/dates";
-import type { Space, Task } from "@/lib/types";
+import { reminderFiresOn } from "@/lib/reminder-utils";
+import type { Reminder, Space, Task } from "@/lib/types";
 
 const MAX_CHIPS = 3;
 
-function Chip({ task, onOpen, floating }: { task: Task; onOpen?: () => void; floating?: boolean }) {
+function Chip({
+  task,
+  spaceColor,
+  hasReminder,
+  onOpen,
+  floating,
+}: {
+  task: Task;
+  /** Only passed when the calendar shows more than one space, to tell them apart. */
+  spaceColor?: string;
+  hasReminder?: boolean;
+  onOpen?: () => void;
+  floating?: boolean;
+}) {
   const p = PRIORITY_MAP[task.priority];
   const done = task.status === "done";
   return (
@@ -38,18 +52,32 @@ function Chip({ task, onOpen, floating }: { task: Task; onOpen?: () => void; flo
       style={{ backgroundColor: `${p.color}1f`, borderColor: p.color, color: "#1e2433" }}
       title={task.title}
     >
+      {spaceColor && (
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: spaceColor }} aria-hidden />
+      )}
       <StatusIcon status={task.status} size={11} />
       {task.due_time && <span className="shrink-0 font-semibold opacity-80">{task.due_time}</span>}
       <span className={cn("truncate", done && "line-through")}>{task.title}</span>
+      {hasReminder && <Bell size={11} className="shrink-0 text-amber-600" aria-label="יש תזכורת" />}
     </div>
   );
 }
 
-function DraggableChip({ task, onOpen }: { task: Task; onOpen: () => void }) {
+function DraggableChip({
+  task,
+  spaceColor,
+  hasReminder,
+  onOpen,
+}: {
+  task: Task;
+  spaceColor?: string;
+  hasReminder?: boolean;
+  onOpen: () => void;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
   return (
     <div ref={setNodeRef} {...attributes} {...listeners} style={{ opacity: isDragging ? 0.3 : 1, touchAction: "none" }}>
-      <Chip task={task} onOpen={onOpen} />
+      <Chip task={task} spaceColor={spaceColor} hasReminder={hasReminder} onOpen={onOpen} />
     </div>
   );
 }
@@ -59,6 +87,8 @@ function DayCell({
   inMonth,
   isToday,
   tasks,
+  colorOf,
+  bellOf,
   onOpenTask,
   onCreate,
   onMore,
@@ -67,6 +97,8 @@ function DayCell({
   inMonth: boolean;
   isToday: boolean;
   tasks: Task[];
+  colorOf: (task: Task) => string | undefined;
+  bellOf: (task: Task, day: string) => boolean;
   onOpenTask: (id: number) => void;
   onCreate: () => void;
   onMore: () => void;
@@ -98,7 +130,13 @@ function DayCell({
       </div>
       <div className="flex flex-col gap-1">
         {shown.map((t) => (
-          <DraggableChip key={t.id} task={t} onOpen={() => onOpenTask(t.id)} />
+          <DraggableChip
+            key={t.id}
+            task={t}
+            spaceColor={colorOf(t)}
+            hasReminder={bellOf(t, iso)}
+            onOpen={() => onOpenTask(t.id)}
+          />
         ))}
         {extra > 0 && (
           <button
@@ -116,8 +154,13 @@ function DayCell({
   );
 }
 
-export function CalendarView({ space }: { space: Space }) {
-  const { tasks, today, patchTask, openTask, openNewTask } = useData();
+/**
+ * Month calendar over the due dates of one or more spaces.
+ * With a single space it behaves exactly like the space's own calendar view; with several
+ * (the dashboard) every task gets a dot in its space's colour.
+ */
+export function CalendarView({ spaces }: { spaces: Space[] }) {
+  const { tasks, reminders, today, patchTask, openTask, openNewTask } = useData();
   const { y: ty, m: tm } = parts(today);
   const [cursor, setCursor] = useState({ y: ty, m: tm });
   const [dayList, setDayList] = useState<string | null>(null);
@@ -129,10 +172,14 @@ export function CalendarView({ space }: { space: Space }) {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
-  const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id), [tasks, space.id]);
+  const multi = spaces.length > 1;
+  const colorBySpace = useMemo(() => new Map(spaces.map((s) => [s.id, s.color])), [spaces]);
+  const colorOf = (t: Task) => (multi ? colorBySpace.get(t.space_id) : undefined);
+
+  const scopedTasks = useMemo(() => tasks.filter((t) => colorBySpace.has(t.space_id)), [tasks, colorBySpace]);
   const byDay = useMemo(() => {
     const m = new Map<string, Task[]>();
-    for (const t of spaceTasks) {
+    for (const t of scopedTasks) {
       if (!t.due_date) continue;
       const arr = m.get(t.due_date) ?? [];
       arr.push(t);
@@ -140,10 +187,27 @@ export function CalendarView({ space }: { space: Space }) {
     }
     for (const arr of m.values()) arr.sort((a, b) => a.position - b.position);
     return m;
-  }, [spaceTasks]);
-  const undated = spaceTasks.filter((t) => !t.due_date && t.status !== "done");
+  }, [scopedTasks]);
+
+  const remindersByTask = useMemo(() => {
+    const m = new Map<number, Reminder[]>();
+    for (const r of reminders) {
+      if (r.task_id === null || !r.enabled) continue;
+      const arr = m.get(r.task_id) ?? [];
+      arr.push(r);
+      m.set(r.task_id, arr);
+    }
+    return m;
+  }, [reminders]);
+  const bellOf = (t: Task, day: string) =>
+    t.status !== "done" && (remindersByTask.get(t.id) ?? []).some((r) => reminderFiresOn(r, day, t));
+
+  const undated = scopedTasks.filter((t) => !t.due_date && t.status !== "done");
   const grid = useMemo(() => monthGrid(cursor.y, cursor.m), [cursor]);
-  const active = activeId ? spaceTasks.find((t) => t.id === activeId) : undefined;
+  const active = activeId ? scopedTasks.find((t) => t.id === activeId) : undefined;
+
+  /** A single space is passed on to the new-task dialog; with several, the dialog asks. */
+  const newTaskSpace = spaces.length === 1 ? { space_id: spaces[0].id } : {};
 
   function shift(delta: number) {
     setCursor((c) => {
@@ -158,7 +222,7 @@ export function CalendarView({ space }: { space: Space }) {
     if (!over.startsWith("day:")) return;
     const iso = over.slice(4);
     const id = Number(e.active.id);
-    const t = spaceTasks.find((x) => x.id === id);
+    const t = scopedTasks.find((x) => x.id === id);
     if (t && t.due_date !== iso) void patchTask(id, { due_date: iso });
   }
 
@@ -212,13 +276,30 @@ export function CalendarView({ space }: { space: Space }) {
               inMonth={parts(iso).m === cursor.m}
               isToday={iso === today}
               tasks={byDay.get(iso) ?? []}
+              colorOf={colorOf}
+              bellOf={bellOf}
               onOpenTask={openTask}
-              onCreate={() => openNewTask({ space_id: space.id, due_date: iso })}
+              onCreate={() => openNewTask({ ...newTaskSpace, due_date: iso })}
               onMore={() => setDayList(iso)}
             />
           ))}
         </div>
       </div>
+
+      {multi && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-xs text-muted">
+          {spaces.map((s) => (
+            <span key={s.id} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+              {s.name}
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1.5">
+            <Bell size={11} className="text-amber-600" />
+            יש תזכורת
+          </span>
+        </div>
+      )}
 
       {undated.length > 0 && (
         <div className="mt-4 rounded-2xl border border-line bg-surface p-3 shadow-sm">
@@ -232,7 +313,7 @@ export function CalendarView({ space }: { space: Space }) {
           {showUndated && (
             <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {undated.map((t) => (
-                <DraggableChip key={t.id} task={t} onOpen={() => openTask(t.id)} />
+                <DraggableChip key={t.id} task={t} spaceColor={colorOf(t)} onOpen={() => openTask(t.id)} />
               ))}
             </div>
           )}
@@ -252,6 +333,8 @@ export function CalendarView({ space }: { space: Space }) {
                 <Chip
                   key={t.id}
                   task={t}
+                  spaceColor={colorOf(t)}
+                  hasReminder={bellOf(t, dayList)}
                   onOpen={() => {
                     setDayList(null);
                     openTask(t.id);
@@ -263,7 +346,7 @@ export function CalendarView({ space }: { space: Space }) {
               onClick={() => {
                 const d = dayList;
                 setDayList(null);
-                openNewTask({ space_id: space.id, due_date: d });
+                openNewTask({ ...newTaskSpace, due_date: d });
               }}
               className="mt-3 w-full rounded-xl bg-primary py-2 text-sm font-medium text-white"
             >
@@ -273,7 +356,7 @@ export function CalendarView({ space }: { space: Space }) {
         </div>
       )}
 
-      <DragOverlay>{active ? <Chip task={active} floating /> : null}</DragOverlay>
+      <DragOverlay>{active ? <Chip task={active} spaceColor={colorOf(active)} floating /> : null}</DragOverlay>
     </DndContext>
   );
 }

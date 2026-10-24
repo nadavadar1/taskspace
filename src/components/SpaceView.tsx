@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { CalendarDays, KanbanSquare, ListChecks, Pencil, Plus } from "lucide-react";
 import { useData } from "./DataProvider";
 import { KanbanView } from "./KanbanView";
 import { TodoView } from "./TodoView";
 import { CalendarView } from "./CalendarView";
-import { cn } from "./ui";
+import { cn, useMounted } from "./ui";
 import { VIEWS } from "@/lib/constants";
 import type { ViewType } from "@/lib/types";
 
@@ -20,8 +20,8 @@ const ICONS: Record<ViewType, React.ReactNode> = {
 export function SpaceView({ id }: { id: number }) {
   const { spaces, tasks, patchSpace, openNewTask, openSpaceDialog } = useData();
   const space = spaces.find((s) => s.id === id);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
+  const calendarSpaces = useMemo(() => (space ? [space] : []), [space]);
 
   if (!space) {
     return (
@@ -88,7 +88,7 @@ export function SpaceView({ id }: { id: number }) {
         <div key={space.view} className="anim-fade">
           {space.view === "kanban" && <KanbanView space={space} />}
           {space.view === "todo" && <TodoView space={space} />}
-          {space.view === "calendar" && <CalendarView space={space} />}
+          {space.view === "calendar" && <CalendarView spaces={calendarSpaces} />}
         </div>
       )}
     </div>
