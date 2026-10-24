@@ -1,14 +1,14 @@
 "use client";
 
 import { Flag } from "lucide-react";
-import { PRIORITY_MAP } from "@/lib/constants";
+import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { relativeLabel } from "@/lib/dates";
 import type { Space, Task } from "@/lib/types";
 import { cn, PriorityBadge, StatusIcon } from "./ui";
 
 export function DueLabel({ task, today, className }: { task: Task; today: string; className?: string }) {
   if (!task.due_date) return null;
-  const overdue = task.status !== "done" && task.due_date < today;
+  const overdue = !isClosed(task.status) && task.due_date < today;
   const isToday = task.due_date === today;
   return (
     <span
@@ -40,6 +40,7 @@ export function TaskCard({
 }) {
   const p = PRIORITY_MAP[task.priority];
   const done = task.status === "done";
+  const notDone = task.status === "not_done";
   return (
     <div
       onClick={onClick}
@@ -59,7 +60,21 @@ export function TaskCard({
           <StatusIcon status={task.status} size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className={cn("text-sm font-medium leading-snug", done && "text-muted line-through")}>{task.title}</div>
+          <div className={cn("text-sm font-medium leading-snug", done && "text-muted line-through", notDone && "text-muted")}>
+            {task.title}
+          </div>
+          {notDone && (
+            <div className="mt-1.5 rounded-lg bg-stone-100 px-2 py-1 text-xs leading-snug text-stone-600">
+              {task.status_note ? (
+                <>
+                  <span className="font-bold">למה לא: </span>
+                  {task.status_note}
+                </>
+              ) : (
+                <span className="text-stone-400">אין הערה. לחץ כדי להוסיף למה.</span>
+              )}
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <PriorityBadge priority={task.priority} small />
             <DueLabel task={task} today={today} />

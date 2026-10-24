@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Bell, BellOff, BellRing } from "lucide-react";
 import { useData } from "./DataProvider";
 import { cn } from "./ui";
@@ -16,19 +16,24 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 
 type State = "checking" | "unsupported" | "disabled" | "enabled" | "busy";
 
+const subscribeNever = () => () => {};
+
 export function NotificationsButton() {
   const { toast } = useData();
   const [state, setState] = useState<State>("checking");
-  const [isIOS] = useState(
-    () => typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && !("MSStream" in window),
+  // false while hydrating (the server can't know the device), then the real answer: no hydration mismatch on iPhones
+  const isIOS = useSyncExternalStore(
+    subscribeNever,
+    () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !("MSStream" in window),
+    () => false,
   );
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-      setState("unsupported");
-      return;
-    }
     (async () => {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        setState("unsupported");
+        return;
+      }
       try {
         const reg = await navigator.serviceWorker.register("/sw.js");
         const sub = await reg.pushManager.getSubscription();

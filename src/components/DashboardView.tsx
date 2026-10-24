@@ -5,8 +5,9 @@ import { useMemo } from "react";
 import { AlertTriangle, CalendarClock, CalendarDays, Check, KanbanSquare, ListChecks, Plus, Sparkles, Zap } from "lucide-react";
 import { useData } from "./DataProvider";
 import { TaskCard } from "./TaskCard";
-import { cn } from "./ui";
-import { PRIORITY_MAP } from "@/lib/constants";
+import { CalendarView } from "./CalendarView";
+import { cn, useMounted } from "./ui";
+import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Task, ViewType } from "@/lib/types";
 
@@ -42,8 +43,12 @@ export function DashboardView() {
     setDashboardSpaces(next.length === spaces.length ? null : next);
   }
 
+  const mounted = useMounted();
+  // the combined calendar follows the same space picker as everything else on the dashboard
+  const calendarSpaces = useMemo(() => spaces.filter((s) => selected.includes(s.id)), [spaces, selected]);
+
   const scoped = useMemo(() => tasks.filter((t) => selected.includes(t.space_id)), [tasks, selected]);
-  const open = useMemo(() => scoped.filter((t) => t.status !== "done"), [scoped]);
+  const open = useMemo(() => scoped.filter((t) => !isClosed(t.status)), [scoped]);
 
   const groups = useMemo(() => {
     const rank = (t: Task) => PRIORITY_MAP[t.priority].rank;
@@ -59,7 +64,7 @@ export function DashboardView() {
   const weekStart = startOfWeek(today);
   const spaceStats = (spaceId: number) => {
     const st = tasks.filter((t) => t.space_id === spaceId);
-    const o = st.filter((t) => t.status !== "done");
+    const o = st.filter((t) => !isClosed(t.status));
     return {
       open: o.length,
       overdue: o.filter((t) => t.due_date && t.due_date < today).length,
@@ -170,6 +175,19 @@ export function DashboardView() {
               אין כרגע משהו שבוער. יש {open.length} משימות פתוחות בשאר המרחבים שנבחרו.
             </p>
           )}
+
+          {/* combined calendar */}
+          <section className="mb-8">
+            <h2 className="mb-3 text-lg font-bold">יומן</h2>
+            {calendarSpaces.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-slate-300 bg-surface py-10 text-center text-sm text-muted">
+                בחר לפחות מרחב אחד למעלה כדי לראות אותו ביומן.
+              </p>
+            ) : (
+              // dnd-kit generates ids that differ between server and client, so render after hydration
+              mounted && <CalendarView spaces={calendarSpaces} />
+            )}
+          </section>
 
           {/* space cards */}
           <h2 className="mb-3 text-lg font-bold">המרחבים שלי</h2>

@@ -15,7 +15,7 @@ import {
   utcToZoned,
   zonedToUtcISO,
 } from "./dates";
-import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP } from "./constants";
+import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP, isClosed } from "./constants";
 import { createTask, deleteTasks, getTask, listSpaces, listTasks, updateTask } from "./store";
 import { createReminder, deleteReminders, listReminders, listRemindersByIds } from "./reminders";
 import type { AgentResponse, AgentScope, PendingInfo, Priority, RepeatKind, Space, Status, Task } from "./types";
@@ -96,7 +96,10 @@ const filterProps = {
     description: "Due-date filter. overdue = before today and not done; none = no due date.",
   },
   search: { type: "string", description: "Text that must appear in the title." },
-  include_done: { type: "boolean", description: "Include completed tasks. Default false unless status contains 'done'." },
+  include_done: {
+    type: "boolean",
+    description: "Include closed tasks (done and not_done). Default false unless status contains 'done' or 'not_done'.",
+  },
 };
 
 const TOOLS = [
@@ -150,7 +153,7 @@ const TOOLS = [
     function: {
       name: "update_tasks",
       description:
-        "Update existing tasks. Target them with task_ids OR a filter (an empty filter {} means all open tasks in the selection). Apply the same changes to every target.",
+        "Update existing tasks. Target them with task_ids OR a filter (an empty filter {} means all open tasks in the selection). Apply the same changes to every target. Status 'not_done' means the task was not done or cannot be done: just set it. NEVER ask the user why - they write the reason themselves in the task's note. Only if they already said a reason in the same message, copy it to changes.status_note.",
       parameters: {
         type: "object",
         properties: {
@@ -162,6 +165,10 @@ const TOOLS = [
               title: { type: "string" },
               description: { type: "string" },
               status: { type: "string", enum: STATUS_KEYS },
+              status_note: {
+                type: "string",
+                description: "Optional, only with status 'not_done': the reason, in the user's own words, if (and only if) they stated one. Leave it out otherwise; never ask for it.",
+              },
               priority: { type: "string", enum: PRIORITY_KEYS },
               due_date: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear (also clears due_time)" },
               due_time: { type: ["string", "null"], description: "HH:MM, Israel time, or null to clear" },
@@ -220,7 +227,7 @@ const TOOLS = [
           in_minutes: { type: "integer", description: "Fire this many minutes from right now. Use for relative phrasing like 'in two hours'." },
           date: { type: "string", description: "YYYY-MM-DD, Israel time. Use together with 'time' for an absolute date/time." },
           time: { type: "string", description: "HH:MM, Israel time. Required together with 'date'." },
-          repeat: { type: "string", enum: ["none", "daily", "weekly", "every_n_days"], description: "Default none." },
+          repeat: { type: "string", enum: ["none", "hourly", "daily", "weekly", "every_n_days"], description: "Default none." },
           repeat_n: { type: "integer", description: "Required when repeat is every_n_days: repeat every N days." },
         },
       },
@@ -312,13 +319,13 @@ function applyFilter(tasks: Task[], f: Filter | undefined, ctx: Ctx): { tasks?: 
     ? filter.priority.filter((p) => PRIORITY_KEYS.includes(p as Priority))
     : [];
   if (statuses.length) list = list.filter((t) => statuses.includes(t.status));
-  else if (!filter.include_done) list = list.filter((t) => t.status !== "done");
+  else if (!filter.include_done) list = list.filter((t) => !isClosed(t.status));
   if (priorities.length) list = list.filter((t) => priorities.includes(t.priority));
   const today = ctx.today;
   const weekEnd = addDays(startOfWeek(today), 6);
   switch (filter.due) {
     case "overdue":
-      list = list.filter((t) => t.due_date && t.due_date < today && t.status !== "done");
+      list = list.filter((t) => t.due_date && t.due_date < today && !isClosed(t.status));
       break;
     case "today":
       list = list.filter((t) => t.due_date === today);
@@ -344,7 +351,7 @@ function applyFilter(tasks: Task[], f: Filter | undefined, ctx: Ctx): { tasks?: 
 }
 
 function score(t: Task, today: string): number {
-  if (t.status === "done") return -1;
+  if (isClosed(t.status)) return -1;
   let s = 0;
   if (t.due_date) {
     const d = diffDays(t.due_date, today);
@@ -371,7 +378,8 @@ function compact(t: Task, ctx: Ctx) {
     status: STATUS_MAP[t.status].label,
     due_date: t.due_date,
     due_time: t.due_time,
-    overdue: !!t.due_date && t.due_date < ctx.today && t.status !== "done",
+    overdue: !!t.due_date && t.due_date < ctx.today && !isClosed(t.status),
+    ...(t.status === "not_done" ? { not_done_reason: t.status_note } : {}),
   };
 }
 
@@ -391,7 +399,9 @@ interface Prepared {
 
 function describeChanges(c: Record<string, unknown>): string {
   const bits: string[] = [];
-  if (typeof c.status === "string" && STATUS_MAP[c.status as Status]) bits.push(`סטטוס ← ${STATUS_MAP[c.status as Status].label}`);
+  if (typeof c.status === "string" && STATUS_MAP[c.status as Status]) {
+    bits.push(`סטטוס ← ${STATUS_MAP[c.status as Status].label}${c.status === "not_done" && typeof c.status_note === "string" ? ` (${c.status_note})` : ""}`);
+  }
   if (typeof c.priority === "string" && PRIORITY_MAP[c.priority as Priority])
     bits.push(`עדיפות ← ${PRIORITY_MAP[c.priority as Priority].label}`);
   if (c.due_date === null) bits.push("הסרת תאריך יעד");
@@ -575,6 +585,7 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
         if (typeof changes.title === "string") patch.title = changes.title;
         if (typeof changes.description === "string") patch.description = changes.description;
         if (typeof changes.status === "string") patch.status = changes.status;
+        if (typeof changes.status_note === "string") patch.status_note = changes.status_note;
         if (typeof changes.priority === "string") patch.priority = changes.priority;
         if (changes.due_date !== undefined) patch.due_date = changes.due_date;
         else if (typeof changes.shift_days === "number") {
@@ -624,8 +635,8 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
       }
 
       const repeat = (typeof args.repeat === "string" ? args.repeat : "none") as RepeatKind;
-      if (!["none", "daily", "weekly", "every_n_days"].includes(repeat)) {
-        return { error: "repeat must be none/daily/weekly/every_n_days" };
+      if (!["none", "hourly", "daily", "weekly", "every_n_days"].includes(repeat)) {
+        return { error: "repeat must be none/hourly/daily/weekly/every_n_days" };
       }
       if (repeat === "every_n_days" && !(Number.isInteger(args.repeat_n) && Number(args.repeat_n) > 0)) {
         return { error: "repeat_n (a positive integer) is required when repeat is every_n_days" };
@@ -690,7 +701,7 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
 }
 
 function summarize(tasks: Task[], spaces: Space[], ctx: Ctx) {
-  const open = tasks.filter((t) => t.status !== "done");
+  const open = tasks.filter((t) => !isClosed(t.status));
   const weekStart = startOfWeek(ctx.today);
   const doneThisWeek = tasks.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
@@ -713,12 +724,13 @@ function summarize(tasks: Task[], spaces: Space[], ctx: Ctx) {
     by_priority: count(open, (t) => PRIORITY_MAP[t.priority].label),
     by_space: spaces.map((s) => {
       const st = tasks.filter((t) => t.space_id === s.id);
-      const so = st.filter((t) => t.status !== "done");
+      const so = st.filter((t) => !isClosed(t.status));
       return {
         space: s.name,
         open: so.length,
         overdue: so.filter((t) => t.due_date && t.due_date < ctx.today).length,
-        done: st.length - so.length,
+        done: st.filter((t) => t.status === "done").length,
+        not_done: st.filter((t) => t.status === "not_done").length,
       };
     }),
     top_priorities: sortTasks(open, ctx).slice(0, 5).map((t) => compact(t, ctx)),
@@ -726,7 +738,7 @@ function summarize(tasks: Task[], spaces: Space[], ctx: Ctx) {
 }
 
 function briefing(tasks: Task[], ctx: Ctx) {
-  const open = tasks.filter((t) => t.status !== "done");
+  const open = tasks.filter((t) => !isClosed(t.status));
   const ranked = sortTasks(open, ctx);
   const weekStart = startOfWeek(ctx.today);
   const reason = (t: Task): string => {

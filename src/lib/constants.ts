@@ -12,7 +12,13 @@ export const STATUSES: { key: Status; label: string; color: string }[] = [
   { key: "in_progress", label: "בעבודה", color: "#0ea5e9" },
   { key: "on_hold", label: "בהשהייה", color: "#a855f7" },
   { key: "done", label: "הושלמה", color: "#22c55e" },
+  { key: "not_done", label: "לא בוצעה", color: "#78716c" },
 ];
+
+/** A task is closed once it is done, or it was decided it won't be done (with a reason). Closed tasks are not "open", overdue or reminded. */
+export function isClosed(status: Status): boolean {
+  return status === "done" || status === "not_done";
+}
 
 export const VIEWS: { key: ViewType; label: string; description: string }[] = [
   { key: "kanban", label: "קנבן", description: "עמודות לפי סטטוס, גוררים משימות ביניהן" },

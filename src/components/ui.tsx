@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { PRIORITY_MAP, STATUS_MAP } from "@/lib/constants";
 import type { Priority, Status } from "@/lib/types";
 
 export function cn(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
+}
+
+const noopSubscribe = () => () => {};
+
+/** False during server rendering and hydration, true afterwards. Used for widgets whose generated ids differ between server and client (dnd-kit). */
+export function useMounted(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
 }
 
 export function Modal({
@@ -101,6 +108,13 @@ export function StatusIcon({ status, size = 16 }: { status: Status; size?: numbe
         <svg {...common}>
           <circle cx="10" cy="10" r="8.2" stroke={color} strokeWidth="2" />
           <path d="M8 6.8v6.4M12 6.8v6.4" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "not_done":
+      return (
+        <svg {...common}>
+          <circle cx="10" cy="10" r="8.2" stroke={color} strokeWidth="2" />
+          <path d="M7 7l6 6M13 7l-6 6" stroke={color} strokeWidth="2" strokeLinecap="round" />
         </svg>
       );
     default:

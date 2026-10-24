@@ -94,7 +94,10 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [override, setOverride] = useState<AgentScope | null>(null);
+  // a manual scope choice only lasts for the page it was made on
+  const [manual, setManual] = useState<{ scope: AgentScope; path: string } | null>(null);
+  const override = manual && manual.path === pathname ? manual.scope : null;
+  const setOverride = (scope: AgentScope | null) => setManual(scope ? { scope, path: pathname } : null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -102,11 +105,9 @@ export function ChatWidget() {
   const messagesRef = useRef<ChatMessage[]>([]);
   const lastNonce = useRef(0);
 
-  messagesRef.current = messages;
-
   useEffect(() => {
-    setOverride(null);
-  }, [pathname]);
+    messagesRef.current = messages;
+  }, [messages]);
 
   const autoScope: AgentScope = useMemo(() => {
     const m = pathname.match(/^\/space\/(\d+)/);
@@ -219,7 +220,7 @@ export function ChatWidget() {
     const { text, send: shouldSend } = chatPrefill;
     consumePrefill();
     if (shouldSend) void send(text);
-    else setInput(text);
+    else setTimeout(() => setInput(text), 0); // not synchronously inside the effect
   }, [chatPrefill, consumePrefill, send]);
 
   function clearChat() {
