@@ -16,11 +16,14 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   title: "מרחב – ניהול משימות חכם",
   description: "מערכת אישית לניהול משימות במרחבים, עם סוכן AI",
+  appleWebApp: { capable: true, title: "מרחב", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#4f46e5",
 };
 
 export const dynamic = "force-dynamic";

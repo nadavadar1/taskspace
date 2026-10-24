@@ -233,7 +233,7 @@ export function ChatWidget() {
       {!chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
-          className="anim-pop group fixed bottom-5 right-5 z-40 flex items-center gap-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 py-3.5 pe-5 ps-4 text-white shadow-xl shadow-indigo-300/50 transition hover:scale-[1.03] hover:shadow-2xl"
+          className="anim-pop group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-40 flex items-center gap-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 py-3.5 pe-5 ps-4 text-white shadow-xl shadow-indigo-300/50 transition hover:scale-[1.03] hover:shadow-2xl"
           aria-label="פתיחת צ'אט עם הסוכן"
         >
           <Sparkles size={22} />
@@ -252,7 +252,7 @@ export function ChatWidget() {
           aria-label="צ'אט עם הסוכן"
         >
           {/* header */}
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 px-4 pb-3 pt-4 text-white">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20">
@@ -463,7 +463,7 @@ export function ChatWidget() {
           </div>
 
           {/* composer */}
-          <div className="border-t border-line bg-surface p-3">
+          <div className="border-t border-line bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="flex items-end gap-2 rounded-2xl border border-line bg-white p-1.5 transition focus-within:border-primary focus-within:ring-4 focus-within:ring-indigo-100">
               <textarea
                 ref={inputRef}

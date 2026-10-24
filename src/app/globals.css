@@ -91,6 +91,15 @@ select {
   }
 }
 
+/* iOS Safari zooms the page when a field with a font smaller than 16px is focused */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 .anim-fade {
   animation: fade-in 0.15s ease-out;
 }
