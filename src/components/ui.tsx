@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { PRIORITY_MAP, STATUS_MAP } from "@/lib/constants";
 import type { Priority, Status } from "@/lib/types";
@@ -10,6 +10,49 @@ export function cn(...c: (string | false | null | undefined)[]) {
 }
 
 const noopSubscribe = () => () => {};
+
+/**
+ * A small per-device preference kept in localStorage (e.g. which dashboard view was last used).
+ * The server and the first client render use `fallback`, so there is no hydration mismatch; storage can be blocked.
+ */
+export function useLocalChoice<T extends string>(key: string, fallback: T, allowed: readonly T[]): [T, (v: T) => void] {
+  const event = `local-choice:${key}`;
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      window.addEventListener("storage", onChange);
+      window.addEventListener(event, onChange);
+      return () => {
+        window.removeEventListener("storage", onChange);
+        window.removeEventListener(event, onChange);
+      };
+    },
+    [event],
+  );
+  const value = useSyncExternalStore(
+    subscribe,
+    () => {
+      try {
+        const v = localStorage.getItem(key);
+        return (allowed as readonly string[]).includes(v ?? "") ? (v as T) : fallback;
+      } catch {
+        return fallback;
+      }
+    },
+    () => fallback,
+  );
+  const set = useCallback(
+    (v: T) => {
+      try {
+        localStorage.setItem(key, v);
+      } catch {
+        /* blocked storage: the choice just won't be remembered */
+      }
+      window.dispatchEvent(new Event(event));
+    },
+    [key, event],
+  );
+  return [value, set];
+}
 
 /** False during server rendering and hydration, true afterwards. Used for widgets whose generated ids differ between server and client (dnd-kit). */
 export function useMounted(): boolean {
