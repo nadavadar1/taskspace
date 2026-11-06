@@ -34,7 +34,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
     today,
     addTask,
     patchTask,
-    removeTask,
+    deleteWithUndo,
     saveTaskReminder,
     removeTaskReminder,
     toast,
@@ -57,7 +57,6 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [recurrence, setRecurrence] = useState<Recurrence>(editing?.recurrence ?? defaults.recurrence ?? "none");
   const [recurrenceN, setRecurrenceN] = useState<number>(editing?.recurrence_n ?? defaults.recurrence_n ?? 3);
   const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // reminder: first send time defaults to one hour from now (Israel time); when editing, the next scheduled time
   const [remOn, setRemOn] = useState(!!existingReminder);
@@ -89,7 +88,6 @@ function TaskForm({ onClose }: { onClose: () => void }) {
 
   function changeTitle(v: string) {
     setTitle(v);
-    setConfirmDelete(false);
   }
 
   function changeDue(v: string) {
@@ -192,13 +190,10 @@ function TaskForm({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  async function remove() {
+  function remove() {
     if (!editing) return;
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
-    await removeTask(editing.id);
+    // one tap: the toast offers "ביטול" for a few seconds
+    deleteWithUndo(editing.id);
     onClose();
   }
 
@@ -215,11 +210,11 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 onClick={remove}
                 className={cn(
                   "flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
-                  confirmDelete ? "bg-red-600 text-white" : "text-red-600 hover:bg-red-50",
+                  "text-red-600 hover:bg-red-50",
                 )}
               >
                 <Trash2 size={15} />
-                {confirmDelete ? "לחץ שוב למחיקה" : "מחיקה"}
+                מחיקה
               </button>
             )}
           </div>

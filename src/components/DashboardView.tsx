@@ -10,7 +10,8 @@ import { QuickAdd } from "./QuickAdd";
 import { DueLabel, TaskExtras } from "./TaskCard";
 import { ChecklistProgressBar } from "./Checklist";
 import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
-import { focusQueue } from "@/lib/focus";
+import { completionStreak, focusQueue } from "@/lib/focus";
+import { GestureTip } from "./GestureTip";
 import { PRIORITIES, PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Priority, Space, Task } from "@/lib/types";
@@ -38,7 +39,7 @@ const byImportance = (a: Task, b: Task) => rank(a) - rank(b) || dueKey(a).locale
 const byDue = (a: Task, b: Task) => dueKey(a).localeCompare(dueKey(b)) || rank(a) - rank(b) || a.id - b.id;
 
 export function DashboardView() {
-  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent, patchTask, openTask } =
+  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent, patchTask, openTask, toast } =
     useData();
   const [grouping, setGrouping] = useLocalChoice<Grouping>("dashboard-grouping", "space", GROUPINGS);
   // on a phone the dashboard is split into tabs, so it is short instead of five screens long
@@ -81,6 +82,21 @@ export function DashboardView() {
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
   ).length;
   const leftToday = open.filter((t) => t.due_date && t.due_date <= today).length;
+  const streak = useMemo(() => completionStreak(tasks, today), [tasks, today]);
+
+  /** Overdue isn't a failure: one tap moves all of it to today (and "ביטול" puts the old dates back). */
+  function overdueToToday() {
+    const moved = attention.overdue.map((t) => ({ id: t.id, was: t.due_date }));
+    for (const m of moved) void patchTask(m.id, { due_date: today });
+    toast(moved.length === 1 ? "משימה אחת הועברה להיום" : `${moved.length} משימות הועברו להיום`, {
+      action: {
+        label: "ביטול",
+        run: () => {
+          for (const m of moved) void patchTask(m.id, { due_date: m.was });
+        },
+      },
+    });
+  }
   const byPriority = useMemo(
     () => Object.fromEntries(PRIORITIES.map((p) => [p.key, open.filter((t) => t.priority === p.key)])) as Record<Priority, Task[]>,
     [open],
@@ -139,7 +155,7 @@ export function DashboardView() {
                 אין משימות פתוחות. כל הכבוד! 🎉
               </div>
             )}
-            <TodayCard done={closedToday} left={leftToday} />
+            <TodayCard done={closedToday} left={leftToday} streak={streak} />
           </div>
 
           <div className="mb-6 hidden sm:block">
@@ -196,6 +212,8 @@ export function DashboardView() {
             </div>
           </div>
 
+          <GestureTip />
+
           {/* numbers */}
           <div className="mb-6 hidden grid-cols-2 gap-3 sm:grid sm:grid-cols-4">
             <Stat value={open.length} label="משימות פתוחות" />
@@ -215,7 +233,24 @@ export function DashboardView() {
             </p>
           )}
           <div className={cn("mb-8 grid gap-3 sm:gap-4 lg:grid-cols-3", phoneTab !== "today" && "hidden sm:grid")}>
-            <AttentionColumn title="באיחור" icon={<AlertTriangle size={16} />} color="#dc2626" tasks={attention.overdue} empty="אין משימות באיחור 👏" spaceById={spaceById} />
+            <AttentionColumn
+              title="באיחור"
+              icon={<AlertTriangle size={16} />}
+              color="#dc2626"
+              tasks={attention.overdue}
+              empty="אין משימות באיחור 👏"
+              spaceById={spaceById}
+              action={
+                attention.overdue.length > 0 && (
+                  <button
+                    onClick={overdueToToday}
+                    className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 transition hover:bg-red-100 active:scale-95"
+                  >
+                    הכול להיום
+                  </button>
+                )
+              }
+            />
             <AttentionColumn title="להיום" icon={<CalendarClock size={16} />} color="#d97706" tasks={attention.today} empty="אין משימות להיום" spaceById={spaceById} />
             <AttentionColumn title="דחוף" icon={<Zap size={16} />} color="#7c3aed" tasks={attention.urgent} empty="אין משימות דחופות" spaceById={spaceById} />
           </div>
@@ -346,7 +381,7 @@ function NextUpCard({
   );
 }
 
-function TodayCard({ done, left }: { done: number; left: number }) {
+function TodayCard({ done, left, streak }: { done: number; left: number; streak: number }) {
   const total = done + left;
   const value = total ? done / total : 1;
   return (
@@ -366,7 +401,14 @@ function TodayCard({ done, left }: { done: number; left: number }) {
         <div className="mt-0.5 text-sm text-muted sm:mt-1">
           {left === 0 ? (done ? "סגרת הכול להיום! 🎉" : "אין משימות להיום") : `נשארו ${left} ${left === 1 ? "משימה" : "משימות"} להיום`}
         </div>
-        <div className="mt-0.5 text-xs text-muted">{done > 0 && `נסגרו היום: ${done}`}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+          {done > 0 && <span>נסגרו היום: {done}</span>}
+          {streak >= 2 && (
+            <span className="font-bold text-orange-500" title="ימים ברצף שסגרת לפחות משימה אחת">
+              🔥 {streak} ימים ברצף
+            </span>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -547,6 +589,7 @@ function AttentionColumn({
   tasks,
   empty,
   spaceById,
+  action,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -554,6 +597,7 @@ function AttentionColumn({
   tasks: Task[];
   empty: string;
   spaceById: Map<number, Space>;
+  action?: React.ReactNode;
 }) {
   return (
     <PanelShell
@@ -565,8 +609,11 @@ function AttentionColumn({
             {icon}
             {title}
           </span>
-          <span className="rounded-full px-2 py-0.5 text-xs font-bold" style={{ backgroundColor: `${color}1a`, color }}>
-            {tasks.length}
+          <span className="flex items-center gap-2">
+            {action}
+            <span className="rounded-full px-2 py-0.5 text-xs font-bold" style={{ backgroundColor: `${color}1a`, color }}>
+              {tasks.length}
+            </span>
           </span>
         </>
       }

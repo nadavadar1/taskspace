@@ -27,6 +27,7 @@ import { ChatWidget } from "./ChatWidget";
 import { NotificationsButton } from "./NotificationsButton";
 import { CommandPalette } from "./CommandPalette";
 import { QuickAdd } from "./QuickAdd";
+import { TaskActionsSheet } from "./TaskActions";
 import { isClosed } from "@/lib/constants";
 
 const MAIN_LINKS = [
@@ -325,6 +326,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <TaskDialog />
       <SpaceDialog />
       <CommandPalette />
+      <TaskActionsSheet />
       <Celebration nonce={celebration} />
       <Toasts toasts={toasts} onDismiss={dismissToast} />
     </div>

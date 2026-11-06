@@ -67,6 +67,12 @@ interface DataCtx {
   setPaletteOpen: (open: boolean) => void;
   quickAddOpen: boolean;
   setQuickAddOpen: (open: boolean) => void;
+  /** Deletes at once on screen; the server delete waits a few seconds so "ביטול" can bring it back. */
+  deleteWithUndo: (id: number) => void;
+  /** The quick-actions sheet (long press / right click on a task). */
+  actionsFor: number | null;
+  openActions: (id: number) => void;
+  closeActions: () => void;
   taskDialog: TaskDialogState;
   openTask: (id: number) => void;
   openNewTask: (defaults?: NewTaskDefaults) => void;
@@ -134,6 +140,8 @@ export function DataProvider({
   const [celebration, setCelebration] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [actionsFor, setActionsFor] = useState<number | null>(null);
+  const pendingDeletes = useRef(new Map<number, { timer: ReturnType<typeof setTimeout>; task: Task }>());
   const toastId = useRef(0);
   const tasksRef = useRef<Task[]>(initial.tasks);
   useEffect(() => {
@@ -160,7 +168,7 @@ export function DataProvider({
         "GET",
       );
       setSpaces(data.spaces);
-      setTasks(data.tasks);
+      setTasks(data.tasks.filter((t) => !pendingDeletes.current.has(t.id)));
       setSettings(data.settings);
       setReminders(data.reminders ?? []);
     } catch {
@@ -278,6 +286,66 @@ export function DataProvider({
     removeTaskRef.current = removeTask;
   }, [patchTask, removeTask]);
 
+  const commitDelete = useCallback(
+    async (id: number) => {
+      const p = pendingDeletes.current.get(id);
+      if (!p) return;
+      pendingDeletes.current.delete(id);
+      clearTimeout(p.timer);
+      try {
+        await request(`/api/tasks/${id}`, "DELETE");
+        setReminders((list) => list.filter((r) => r.task_id !== id));
+      } catch (e) {
+        setTasks((list) => (list.some((t) => t.id === id) ? list : [...list, p.task]));
+        toast(e instanceof Error ? e.message : "המחיקה נכשלה");
+      }
+    },
+    [toast],
+  );
+
+  const deleteWithUndo = useCallback<DataCtx["deleteWithUndo"]>(
+    (id) => {
+      const task = tasksRef.current.find((t) => t.id === id);
+      if (!task || pendingDeletes.current.has(id)) return;
+      setTasks((list) => list.filter((t) => t.id !== id));
+      setTaskDialog((d) => (d?.mode === "edit" && d.id === id ? null : d));
+      setActionsFor((a) => (a === id ? null : a));
+      const timer = setTimeout(() => void commitDelete(id), 5500);
+      pendingDeletes.current.set(id, { timer, task });
+      toast(`נמחקה: ${task.title}`, {
+        action: {
+          label: "ביטול",
+          run: () => {
+            const p = pendingDeletes.current.get(id);
+            if (!p) return;
+            clearTimeout(p.timer);
+            pendingDeletes.current.delete(id);
+            setTasks((list) => (list.some((t) => t.id === id) ? list : [...list, p.task]));
+          },
+        },
+      });
+    },
+    [toast, commitDelete],
+  );
+
+  // leaving the app (or locking the phone) finishes the waiting deletes right away
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState !== "hidden") return;
+      for (const [id, p] of pendingDeletes.current) {
+        clearTimeout(p.timer);
+        void fetch(`/api/tasks/${id}`, { method: "DELETE", keepalive: true }).catch(() => {});
+      }
+      pendingDeletes.current.clear();
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
+
   const addSpace = useCallback<DataCtx["addSpace"]>(
     async (input) => {
       try {
@@ -366,6 +434,10 @@ export function DataProvider({
       setPaletteOpen,
       quickAddOpen,
       setQuickAddOpen,
+      deleteWithUndo,
+      actionsFor,
+      openActions: (id) => setActionsFor(id),
+      closeActions: () => setActionsFor(null),
       taskDialog,
       openTask: (id) => setTaskDialog({ mode: "edit", id }),
       openNewTask: (defaults = {}) => setTaskDialog({ mode: "new", defaults }),
@@ -401,6 +473,8 @@ export function DataProvider({
       celebration,
       paletteOpen,
       quickAddOpen,
+      deleteWithUndo,
+      actionsFor,
       taskDialog,
       spaceDialog,
       chatOpen,

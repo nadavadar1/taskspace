@@ -1,4 +1,5 @@
 import { PRIORITY_MAP, isClosed } from "./constants";
+import { addDays, todayISO } from "./dates";
 import type { Task } from "./types";
 
 const dueKey = (t: Task) => `${t.due_date ?? "9999-99-99"} ${t.due_time ?? "99:99"}`;
@@ -28,4 +29,20 @@ export function focusQueue(tasks: Task[], today: string): Task[] {
         dueKey(a).localeCompare(dueKey(b)) ||
         a.id - b.id,
     );
+}
+
+/**
+ * Days in a row (Israel time) with at least one task done, counting back from today.
+ * A day that has not had a completion yet does not break the streak until it is over.
+ */
+export function completionStreak(tasks: Task[], today: string): number {
+  const days = new Set<string>();
+  for (const t of tasks) if (t.status === "done" && t.completed_at) days.add(todayISO(new Date(t.completed_at)));
+  let d = days.has(today) ? today : addDays(today, -1);
+  let n = 0;
+  while (days.has(d)) {
+    n++;
+    d = addDays(d, -1);
+  }
+  return n;
 }
