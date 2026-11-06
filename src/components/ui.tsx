@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { PRIORITY_MAP, STATUS_MAP } from "@/lib/constants";
 import type { Priority, Status } from "@/lib/types";
@@ -369,10 +369,24 @@ export function Sheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   if (!open) return null;
+  return <SheetBody onClose={onClose} title={title}>{children}</SheetBody>;
+}
+
+function SheetBody({ onClose, title, children }: { onClose: () => void; title?: React.ReactNode; children: React.ReactNode }) {
+  // Opened by a long press, the finger is still down: the tap the phone sends when it lifts must not
+  // land on (and press) something in the sheet, so it ignores touches for a moment.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 400);
+    return () => clearTimeout(t);
+  }, []);
   return (
     <div
-      className="anim-fade fixed inset-0 z-50 flex items-end justify-center bg-black/45 backdrop-blur-[2px] sm:items-center sm:p-4"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={cn(
+        "anim-fade fixed inset-0 z-50 flex items-end justify-center bg-black/45 backdrop-blur-[2px] sm:items-center sm:p-4",
+        !ready && "pointer-events-none",
+      )}
+      onPointerDown={(e) => ready && e.target === e.currentTarget && onClose()}
     >
       <div
         className="anim-slide w-full max-w-md rounded-t-3xl bg-surface pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:rounded-3xl"

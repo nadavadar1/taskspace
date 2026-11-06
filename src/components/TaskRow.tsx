@@ -1,6 +1,8 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useData } from "./DataProvider";
+import { Swipeable } from "./Swipe";
 import { DueLabel, TaskExtras } from "./TaskCard";
 import { PriorityBadge, StatusIcon, cn } from "./ui";
 import { PRIORITY_MAP, STATUS_MAP, isClosed } from "@/lib/constants";
@@ -25,6 +27,7 @@ export function DoneCircle({ task, size = 24 }: { task: Task; size?: number }) {
         e.stopPropagation();
         void patchTask(task.id, { status: done ? "new" : "done" });
       }}
+      data-no-swipe
       className="-m-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-90"
       aria-label={done ? "החזרה למשימות פתוחות" : `סימון "${task.title}" כהושלמה`}
     >
@@ -64,10 +67,16 @@ export function TaskRow({
   showSpace?: boolean;
   showPriority?: boolean;
 }) {
-  const { today, openTask } = useData();
+  const { today, openTask, patchTask, deleteWithUndo, openActions } = useData();
   const p = PRIORITY_MAP[task.priority];
   const closed = isClosed(task.status);
   return (
+    <Swipeable
+      done={task.status === "done"}
+      onDone={task.status === "not_done" ? undefined : () => patchTask(task.id, { status: task.status === "done" ? "new" : "done" })}
+      onDelete={() => deleteWithUndo(task.id)}
+      onLongPress={() => openActions(task.id)}
+    >
     <div
       role="button"
       tabIndex={0}
@@ -98,6 +107,28 @@ export function TaskRow({
           )}
         </span>
       </span>
+      <DeleteX taskId={task.id} title={task.title} />
     </div>
+    </Swipeable>
+  );
+}
+
+/** Deletes straight away (with "ביטול" in the toast for a few seconds). */
+export function DeleteX({ taskId, title }: { taskId: number; title: string }) {
+  const { deleteWithUndo } = useData();
+  return (
+    <button
+      type="button"
+      data-no-swipe
+      onClick={(e) => {
+        e.stopPropagation();
+        deleteWithUndo(taskId);
+      }}
+      className="-me-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-300 transition hover:bg-red-50 hover:text-red-600 active:bg-red-50 active:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+      aria-label={`מחיקת "${title}"`}
+      title="מחיקה"
+    >
+      <X size={17} />
+    </button>
   );
 }

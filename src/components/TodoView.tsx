@@ -5,6 +5,9 @@ import { ChevronDown } from "lucide-react";
 import { useData } from "./DataProvider";
 import { DueLabel, TaskExtras } from "./TaskCard";
 import { QuickAdd } from "./QuickAdd";
+import { Swipeable } from "./Swipe";
+import { DeleteX } from "./TaskRow";
+import { GestureTip } from "./GestureTip";
 import { StatusIcon, cn } from "./ui";
 import { PRIORITIES, PRIORITY_MAP, STATUS_MAP, isClosed } from "@/lib/constants";
 import type { Space, Task } from "@/lib/types";
@@ -23,7 +26,8 @@ function Check({ done, color, onToggle }: { done: boolean; color: string; onTogg
         e.stopPropagation();
         onToggle();
       }}
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition hover:scale-110"
+      data-no-swipe
+      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition hover:scale-110 active:scale-90"
       style={{ borderColor: done ? STATUS_MAP.done.color : color, backgroundColor: done ? STATUS_MAP.done.color : "transparent" }}
       aria-label={done ? "סימון כלא הושלמה" : "סימון כהושלמה"}
     >
@@ -37,17 +41,26 @@ function Check({ done, color, onToggle }: { done: boolean; color: string; onTogg
 }
 
 function Row({ task }: { task: Task }) {
-  const { today, patchTask, openTask } = useData();
+  const { today, patchTask, openTask, deleteWithUndo, openActions } = useData();
   const done = task.status === "done";
   const notDone = task.status === "not_done";
   const p = PRIORITY_MAP[task.priority];
   return (
-    <li
+    <li>
+    <Swipeable
+      done={done}
+      onDone={notDone ? undefined : () => patchTask(task.id, { status: done ? "new" : "done" })}
+      onDelete={() => deleteWithUndo(task.id)}
+      onLongPress={() => openActions(task.id)}
+    >
+    <div
       onClick={() => openTask(task.id)}
-      className="group flex cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 transition hover:border-line hover:bg-slate-50"
+      data-task-row
+      className="group flex cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-3 transition hover:border-line hover:bg-slate-50 active:bg-slate-100 sm:py-2.5"
     >
       {notDone ? (
         <button
+          data-no-swipe
           onClick={(e) => {
             e.stopPropagation();
             void patchTask(task.id, { status: "new" });
@@ -66,7 +79,7 @@ function Row({ task }: { task: Task }) {
         />
       )}
       <span className="min-w-0 flex-1">
-        <span className={cn("block truncate text-[15px]", done && "text-muted line-through", notDone && "text-muted")}>
+        <span className={cn("line-clamp-2 block text-[15px] leading-snug sm:truncate", done && "text-muted line-through", notDone && "text-muted")}>
           {task.title}
         </span>
         {notDone && (
@@ -91,6 +104,9 @@ function Row({ task }: { task: Task }) {
         </span>
       )}
       <DueLabel task={task} today={today} />
+      <DeleteX taskId={task.id} title={task.title} />
+    </div>
+    </Swipeable>
     </li>
   );
 }
@@ -115,6 +131,7 @@ export function TodoView({ space }: { space: Space }) {
       <div className="mb-5">
         <QuickAdd spaceId={space.id} />
       </div>
+      <GestureTip />
 
       {groups.length === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 py-14 text-center text-muted">
