@@ -18,7 +18,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { Plus } from "lucide-react";
 import { useData } from "./DataProvider";
 import { TaskCard } from "./TaskCard";
-import { StatusIcon, cn } from "./ui";
+import { TaskRow } from "./TaskRow";
+import { StatusIcon, cn, useIsPhone, useLocalChoice } from "./ui";
 import { STATUSES } from "@/lib/constants";
 import type { Space, Status, Task } from "@/lib/types";
 
@@ -64,12 +65,12 @@ function Column({
         <div className="flex items-center gap-2 text-sm font-bold">
           <StatusIcon status={status.key} size={16} />
           <span>{status.label}</span>
-          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-muted">{tasks.length}</span>
+          <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted">{tasks.length}</span>
         </div>
         {status.key !== "not_done" && (
           <button
             onClick={onAdd}
-            className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-primary"
+            className="rounded-lg p-1 text-slate-500 transition hover:bg-surface hover:text-primary"
             aria-label={`משימה חדשה ב${status.label}`}
           >
             <Plus size={16} />
@@ -92,7 +93,76 @@ function Column({
   );
 }
 
+const STATUS_ORDER = STATUSES.map((s) => s.key);
+
+/** On a phone: one status at a time, chosen from tabs with counts (dragging across columns doesn't work on a small screen). */
+function PhoneKanban({ space }: { space: Space }) {
+  const { tasks, patchTask } = useData();
+  const [tab, setTab] = useLocalChoice<Status>(`kanban-tab-${space.id}`, "new", STATUS_ORDER);
+  const spaceTasks = tasks.filter((t) => t.space_id === space.id);
+  const counts = Object.fromEntries(STATUSES.map((s) => [s.key, spaceTasks.filter((t) => t.status === s.key).length]));
+  const list = spaceTasks
+    .filter((t) => t.status === tab)
+    .sort((a, b) => a.position - b.position || a.id - b.id);
+  const next: Partial<Record<Status, { to: Status; label: string }>> = {
+    new: { to: "in_progress", label: "להתחיל" },
+    on_hold: { to: "in_progress", label: "להמשיך" },
+    in_progress: { to: "on_hold", label: "להשהות" },
+  };
+  return (
+    <div>
+      <div className="scroll-thin -mx-3 mb-3 flex gap-1.5 overflow-x-auto px-3 pb-1" role="tablist">
+        {STATUSES.map((s) => (
+          <button
+            key={s.key}
+            role="tab"
+            aria-selected={tab === s.key}
+            onClick={() => setTab(s.key)}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition",
+              tab === s.key ? "border-transparent text-white shadow-soft" : "border-line bg-surface text-slate-600",
+            )}
+            style={tab === s.key ? { backgroundColor: s.color } : undefined}
+          >
+            {tab !== s.key && <StatusIcon status={s.key} size={14} />}
+            {s.label}
+            <span className={cn("rounded-full px-1.5 text-xs", tab === s.key ? "bg-white/25" : "bg-slate-100 text-muted")}>
+              {counts[s.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-line bg-surface p-1 shadow-soft">
+        {list.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">אין כאן משימות</p>
+        ) : (
+          list.map((t) => (
+            <div key={t.id} className="flex items-center">
+              <div className="min-w-0 flex-1">
+                <TaskRow task={t} showPriority />
+              </div>
+              {next[t.status] && (
+                <button
+                  onClick={() => patchTask(t.id, { status: next[t.status]!.to })}
+                  className="me-2 shrink-0 rounded-full border border-line px-3 py-1.5 text-xs font-bold text-slate-600 active:bg-slate-100"
+                >
+                  {next[t.status]!.label}
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function KanbanView({ space }: { space: Space }) {
+  const phone = useIsPhone();
+  return phone ? <PhoneKanban space={space} /> : <BoardKanban space={space} />;
+}
+
+function BoardKanban({ space }: { space: Space }) {
   const { tasks, today, patchTask, openTask, openNewTask } = useData();
   const [activeId, setActiveId] = useState<number | null>(null);
 

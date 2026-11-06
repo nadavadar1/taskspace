@@ -7,6 +7,7 @@ import { listActiveReminders } from "@/lib/reminders";
 import { LoginForm } from "@/components/LoginForm";
 import { DataProvider } from "@/components/DataProvider";
 import { AppShell } from "@/components/AppShell";
+import { THEME_BOOT_SCRIPT } from "@/components/theme-script";
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -24,7 +25,10 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#4f46e5",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f6fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c1018" },
+  ],
 };
 
 export const dynamic = "force-dynamic";
@@ -66,7 +70,10 @@ async function loadInitialData() {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl" className={`${heebo.variable} h-full`}>
+    <html lang="he" dir="rtl" className={`${heebo.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-full">
         <Content>{children}</Content>
       </body>

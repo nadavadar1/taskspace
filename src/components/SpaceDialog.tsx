@@ -137,7 +137,7 @@ function SpaceForm({ onClose, editingId }: { onClose: () => void; editingId?: nu
                 onClick={() => setView(v.key)}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3 text-start transition",
-                  view === v.key ? "bg-primary-soft" : "border-line bg-white hover:bg-slate-50",
+                  view === v.key ? "bg-primary-soft" : "border-line bg-surface hover:bg-slate-50",
                 )}
                 style={view === v.key ? { borderColor: color } : undefined}
               >

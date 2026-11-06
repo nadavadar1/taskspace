@@ -38,11 +38,11 @@ export function SpaceView({ id }: { id: number }) {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="h-9 w-2 rounded-full" style={{ backgroundColor: space.color }} />
-          <div>
-            <h1 className="text-2xl font-bold leading-tight">{space.name}</h1>
+      <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5 sm:flex-wrap">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <span className="hidden h-9 w-2 rounded-full sm:block" style={{ backgroundColor: space.color }} />
+          <div className="min-w-0">
+            <h1 className="hidden text-2xl font-bold leading-tight sm:block">{space.name}</h1>
             <p className="text-sm text-muted">{open === 0 ? "אין משימות פתוחות" : open === 1 ? "משימה פתוחה אחת" : `${open} משימות פתוחות`}</p>
           </div>
           <button
@@ -54,14 +54,14 @@ export function SpaceView({ id }: { id: number }) {
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <div className="flex rounded-xl border border-line bg-surface p-1">
             {VIEWS.map((v) => (
               <button
                 key={v.key}
                 onClick={() => space.view !== v.key && patchSpace(space.id, { view: v.key })}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition",
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition sm:py-1.5",
                   space.view === v.key ? "text-white shadow-sm" : "text-slate-500 hover:bg-slate-100",
                 )}
                 style={space.view === v.key ? { backgroundColor: space.color } : undefined}
@@ -74,7 +74,7 @@ export function SpaceView({ id }: { id: number }) {
           </div>
           <button
             onClick={() => openNewTask({ space_id: space.id })}
-            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:brightness-110"
+            className="hidden items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:brightness-110 sm:flex"
             style={{ backgroundColor: space.color }}
           >
             <Plus size={16} />

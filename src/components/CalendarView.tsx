@@ -14,7 +14,8 @@ import {
 } from "@dnd-kit/core";
 import { Bell, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useData } from "./DataProvider";
-import { cn, StatusIcon } from "./ui";
+import { cn, StatusIcon, useIsPhone } from "./ui";
+import { PhoneCalendar } from "./PhoneCalendar";
 import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { HE_DAYS, HE_MONTHS, monthGrid, parts, formatLong } from "@/lib/dates";
 import { reminderFiresOn } from "@/lib/reminder-utils";
@@ -55,7 +56,7 @@ function Chip({
       style={{
         backgroundColor: `${tint}${spaceColor ? "33" : "1f"}`,
         borderColor: tint,
-        color: "#1e2433",
+        color: "var(--ink)",
       }}
       title={notDone && task.status_note ? `${task.title} — לא בוצעה: ${task.status_note}` : task.title}
     >
@@ -172,6 +173,11 @@ function DayCell({
  * (the dashboard) every task gets a dot in its space's colour.
  */
 export function CalendarView({ spaces }: { spaces: Space[] }) {
+  const phone = useIsPhone();
+  return phone ? <PhoneCalendar spaces={spaces} /> : <MonthCalendar spaces={spaces} />;
+}
+
+function MonthCalendar({ spaces }: { spaces: Space[] }) {
   const { tasks, reminders, today, patchTask, openTask, openNewTask } = useData();
   const { y: ty, m: tm } = parts(today);
   const [cursor, setCursor] = useState({ y: ty, m: tm });
@@ -339,7 +345,7 @@ export function CalendarView({ spaces }: { spaces: Space[] }) {
 
       {dayList && (
         <div
-          className="anim-fade fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4"
+          className="anim-fade fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
           onMouseDown={(e) => e.target === e.currentTarget && setDayList(null)}
         >
           <div className="anim-pop w-full max-w-sm rounded-2xl bg-surface p-4 shadow-2xl">

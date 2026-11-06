@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { Priority, Reminder, RepeatKind, Settings, Space, Status, Task, ViewType } from "@/lib/types";
-import { todayISO } from "@/lib/dates";
+import type { ChecklistItem, Priority, Recurrence, Reminder, RepeatKind, Settings, Space, Status, Task, ViewType } from "@/lib/types";
+import { relativeLabel, todayISO } from "@/lib/dates";
 import { isClosed } from "@/lib/constants";
 
 export interface NewTaskDefaults {
@@ -12,14 +12,18 @@ export interface NewTaskDefaults {
   status?: Status;
   priority?: Priority;
   title?: string;
+  recurrence?: Recurrence;
+  recurrence_n?: number | null;
 }
 
 type TaskDialogState = { mode: "edit"; id: number } | { mode: "new"; defaults: NewTaskDefaults } | null;
 type SpaceDialogState = { mode: "new" } | { mode: "edit"; id: number } | null;
 
-interface Toast {
+export interface Toast {
   id: number;
   message: string;
+  tone?: "default" | "success";
+  action?: { label: string; run: () => void };
 }
 
 export interface TaskReminderInput {
@@ -40,7 +44,13 @@ interface DataCtx {
   saveTaskReminder: (taskId: number, input: TaskReminderInput) => Promise<boolean>;
   removeTaskReminder: (taskId: number) => Promise<void>;
   addTask: (
-    input: NewTaskDefaults & { space_id: number; title: string; description?: string; status_note?: string },
+    input: NewTaskDefaults & {
+      space_id: number;
+      title: string;
+      description?: string;
+      status_note?: string;
+      checklist?: ChecklistItem[];
+    },
   ) => Promise<Task | null>;
   patchTask: (id: number, patch: Partial<Task>) => Promise<void>;
   removeTask: (id: number) => Promise<void>;
@@ -48,8 +58,15 @@ interface DataCtx {
   patchSpace: (id: number, patch: Partial<Pick<Space, "name" | "color" | "view">>) => Promise<void>;
   removeSpace: (id: number) => Promise<void>;
   setDashboardSpaces: (ids: number[] | null) => void;
-  toast: (message: string) => void;
+  toast: (message: string, opts?: Omit<Toast, "id" | "message">) => void;
+  dismissToast: (id: number) => void;
   toasts: Toast[];
+  /** Bumps on every completed task: drives the small celebration. */
+  celebration: number;
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+  quickAddOpen: boolean;
+  setQuickAddOpen: (open: boolean) => void;
   taskDialog: TaskDialogState;
   openTask: (id: number) => void;
   openNewTask: (defaults?: NewTaskDefaults) => void;
@@ -114,17 +131,26 @@ export function DataProvider({
   const [spaceDialog, setSpaceDialog] = useState<SpaceDialogState>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatPrefill, setChatPrefill] = useState<{ text: string; send: boolean; nonce: number } | null>(null);
+  const [celebration, setCelebration] = useState(0);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const toastId = useRef(0);
+  const tasksRef = useRef<Task[]>(initial.tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
 
   useEffect(() => {
     const t = setInterval(() => setToday(todayISO()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  const toast = useCallback((message: string) => {
+  const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+
+  const toast = useCallback<DataCtx["toast"]>((message, opts) => {
     const id = ++toastId.current;
-    setToasts((t) => [...t, { id, message }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+    setToasts((t) => [...t.slice(-2), { id, message, ...opts }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), opts?.action ? 6000 : 3500);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -163,27 +189,44 @@ export function DataProvider({
     [toast],
   );
 
+  const patchTaskRef = useRef<DataCtx["patchTask"] | null>(null);
+  const removeTaskRef = useRef<DataCtx["removeTask"] | null>(null);
+
   const patchTask = useCallback<DataCtx["patchTask"]>(
     async (id, patch) => {
-      let before: Task | undefined;
-      setTasks((list) =>
-        list.map((t) => {
-          if (t.id !== id) return t;
-          before = t;
-          return localPatch(t, patch);
-        }),
-      );
+      const before = tasksRef.current.find((t) => t.id === id);
+      setTasks((list) => list.map((t) => (t.id === id ? localPatch(t, patch) : t)));
+      const justDone = patch.status === "done" && before && before.status !== "done";
+      if (justDone) setCelebration((n) => n + 1);
       try {
-        const { task } = await request<{ task: Task }>(`/api/tasks/${id}`, "PATCH", patch);
-        setTasks((list) => list.map((t) => (t.id === id ? task : t)));
+        const { task, spawned } = await request<{ task: Task; spawned?: Task | null }>(`/api/tasks/${id}`, "PATCH", patch);
+        setTasks((list) => [...list.map((t) => (t.id === id ? task : t)), ...(spawned ? [spawned] : [])]);
         // the server switches off the reminders of a task that is closed (done / not done)
-        if (patch.status && isClosed(patch.status)) setReminders((list) => list.filter((r) => r.task_id !== id));
+        if (patch.status && isClosed(patch.status)) {
+          setReminders((list) => list.filter((r) => r.task_id !== id));
+          if (spawned) void refresh(); // the next copy may carry a reminder
+        }
+        if (justDone && before) {
+          const undo = () => {
+            void patchTaskRef.current?.(id, {
+              status: before.status,
+              ...(before.status === "not_done" ? { status_note: before.status_note } : {}),
+            });
+            if (spawned) void removeTaskRef.current?.(spawned.id);
+          };
+          toast(
+            spawned && spawned.due_date
+              ? `כל הכבוד! הפעם הבאה: ${relativeLabel(spawned.due_date, todayISO())}`
+              : "כל הכבוד! המשימה הושלמה",
+            { tone: "success", action: { label: "ביטול", run: undo } },
+          );
+        }
       } catch (e) {
-        if (before) setTasks((list) => list.map((t) => (t.id === id ? before! : t)));
+        if (before) setTasks((list) => list.map((t) => (t.id === id ? before : t)));
         toast(e instanceof Error ? e.message : "העדכון נכשל");
       }
     },
-    [toast],
+    [toast, refresh],
   );
 
   const saveTaskReminder = useCallback<DataCtx["saveTaskReminder"]>(
@@ -229,6 +272,11 @@ export function DataProvider({
     },
     [toast],
   );
+
+  useEffect(() => {
+    patchTaskRef.current = patchTask;
+    removeTaskRef.current = removeTask;
+  }, [patchTask, removeTask]);
 
   const addSpace = useCallback<DataCtx["addSpace"]>(
     async (input) => {
@@ -311,7 +359,13 @@ export function DataProvider({
       removeSpace,
       setDashboardSpaces,
       toast,
+      dismissToast,
       toasts,
+      celebration,
+      paletteOpen,
+      setPaletteOpen,
+      quickAddOpen,
+      setQuickAddOpen,
       taskDialog,
       openTask: (id) => setTaskDialog({ mode: "edit", id }),
       openNewTask: (defaults = {}) => setTaskDialog({ mode: "new", defaults }),
@@ -342,7 +396,11 @@ export function DataProvider({
       removeSpace,
       setDashboardSpaces,
       toast,
+      dismissToast,
       toasts,
+      celebration,
+      paletteOpen,
+      quickAddOpen,
       taskDialog,
       spaceDialog,
       chatOpen,

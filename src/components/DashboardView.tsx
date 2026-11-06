@@ -2,17 +2,23 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { AlertTriangle, CalendarClock, CalendarDays, Check, Flag, Layers, Plus, Sparkles, Zap } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarDays, Check, Flag, Layers, Play, Plus, Sparkles, Target, Zap } from "lucide-react";
 import { useData } from "./DataProvider";
 import { CalendarView } from "./CalendarView";
 import { TaskRow } from "./TaskRow";
-import { cn, useLocalChoice, useMounted } from "./ui";
+import { QuickAdd } from "./QuickAdd";
+import { DueLabel, TaskExtras } from "./TaskCard";
+import { ChecklistProgressBar } from "./Checklist";
+import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
+import { focusQueue } from "@/lib/focus";
 import { PRIORITIES, PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Priority, Space, Task } from "@/lib/types";
 
 type Grouping = "space" | "priority";
 const GROUPINGS: readonly Grouping[] = ["space", "priority"];
+type PhoneTab = "today" | "all" | "calendar";
+const PHONE_TABS: readonly PhoneTab[] = ["today", "all", "calendar"];
 
 function greeting(): string {
   const h = Number(
@@ -32,8 +38,11 @@ const byImportance = (a: Task, b: Task) => rank(a) - rank(b) || dueKey(a).locale
 const byDue = (a: Task, b: Task) => dueKey(a).localeCompare(dueKey(b)) || rank(a) - rank(b) || a.id - b.id;
 
 export function DashboardView() {
-  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent } = useData();
+  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent, patchTask, openTask } =
+    useData();
   const [grouping, setGrouping] = useLocalChoice<Grouping>("dashboard-grouping", "space", GROUPINGS);
+  // on a phone the dashboard is split into tabs, so it is short instead of five screens long
+  const [phoneTab, setPhoneTab] = useLocalChoice<PhoneTab>("dashboard-phone-tab", "today", PHONE_TABS);
 
   const selected = useMemo(() => {
     const ids = settings.dashboard_spaces;
@@ -67,6 +76,11 @@ export function DashboardView() {
   const doneThisWeek = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
+  const nextUp = useMemo(() => focusQueue(open, today)[0], [open, today]);
+  const closedToday = scoped.filter(
+    (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
+  ).length;
+  const leftToday = open.filter((t) => t.due_date && t.due_date <= today).length;
   const byPriority = useMemo(
     () => Object.fromEntries(PRIORITIES.map((p) => [p.key, open.filter((t) => t.priority === p.key)])) as Record<Priority, Task[]>,
     [open],
@@ -74,12 +88,12 @@ export function DashboardView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-6">
         <div>
           <p className="text-sm text-muted">{formatLong(today)}</p>
           <h1 className="text-2xl font-bold sm:text-3xl">{greeting()} 👋</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="hidden items-center gap-2 sm:flex">
           <button
             onClick={() => askAgent("תכין לי סיכום יומי: על מה כדאי להתמקד היום?")}
             className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-primary-soft px-4 py-2 text-sm font-medium text-primary transition hover:bg-indigo-100"
@@ -90,7 +104,7 @@ export function DashboardView() {
           <button
             onClick={() => openNewTask()}
             disabled={!spaces.length}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-600 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:bg-indigo-600 disabled:opacity-50"
           >
             <Plus size={16} />
             משימה חדשה
@@ -111,14 +125,35 @@ export function DashboardView() {
         </div>
       ) : (
         <>
-          {/* space picker */}
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            <span className="me-1 text-sm font-medium text-slate-500">מציג:</span>
+          {/* hero: the one next thing + today's progress */}
+          <div className="mb-4 grid gap-3 sm:mb-5 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            {nextUp ? (
+              <NextUpCard
+                task={nextUp}
+                space={spaceById.get(nextUp.space_id)}
+                onDone={() => patchTask(nextUp.id, { status: "done" })}
+                onOpen={() => openTask(nextUp.id)}
+              />
+            ) : (
+              <div className="flex items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-surface p-8 text-center text-muted">
+                אין משימות פתוחות. כל הכבוד! 🎉
+              </div>
+            )}
+            <TodayCard done={closedToday} left={leftToday} />
+          </div>
+
+          <div className="mb-6 hidden sm:block">
+            <QuickAdd />
+          </div>
+
+          {/* space picker: one sideways-scrolling line on a phone */}
+          <div className="scroll-thin -mx-3 mb-4 flex items-center gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:mb-5 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+            <span className="me-1 hidden text-sm font-medium text-slate-500 sm:inline">מציג:</span>
             <button
               onClick={() => setDashboardSpaces(null)}
               className={cn(
-                "rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
-                allSelected ? "border-slate-900 bg-slate-900 text-white" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
+                "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
+                allSelected ? "border-ink bg-ink text-surface" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
               )}
             >
               כל המרחבים
@@ -130,7 +165,7 @@ export function DashboardView() {
                   key={s.id}
                   onClick={() => toggle(s.id)}
                   className={cn(
-                    "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
+                    "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
                     on ? "text-white" : "border-line bg-surface text-slate-500 hover:bg-slate-50",
                   )}
                   style={on ? { backgroundColor: s.color, borderColor: s.color } : undefined}
@@ -142,8 +177,27 @@ export function DashboardView() {
             })}
           </div>
 
+          {/* phone tabs */}
+          <div
+            className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-3 mb-4 bg-bg/90 px-3 py-2 backdrop-blur-xl sm:hidden"
+            role="tablist"
+            aria-label="מה להציג"
+          >
+            <div className="grid grid-cols-3 gap-1 rounded-2xl border border-line bg-surface p-1 shadow-soft">
+              <PhoneTabButton
+                active={phoneTab === "today"}
+                onClick={() => setPhoneTab("today")}
+                label="היום"
+                count={attention.overdue.length + attention.today.length + attention.urgent.length}
+                alert={attention.overdue.length > 0}
+              />
+              <PhoneTabButton active={phoneTab === "all"} onClick={() => setPhoneTab("all")} label="הכול" count={open.length} />
+              <PhoneTabButton active={phoneTab === "calendar"} onClick={() => setPhoneTab("calendar")} label="יומן" />
+            </div>
+          </div>
+
           {/* numbers */}
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-6 hidden grid-cols-2 gap-3 sm:grid sm:grid-cols-4">
             <Stat value={open.length} label="משימות פתוחות" />
             <Stat value={attention.overdue.length} label="באיחור" tone={attention.overdue.length ? "bad" : undefined} />
             <Stat value={attention.today.length} label="להיום" tone={attention.today.length ? "warn" : undefined} />
@@ -151,16 +205,25 @@ export function DashboardView() {
           </div>
 
           {/* needs attention */}
-          <div className="mb-8 grid gap-4 lg:grid-cols-3">
+          {phoneTab === "today" && !attention.overdue.length && !attention.today.length && !attention.urgent.length && (
+            <p className="mb-8 rounded-3xl border border-dashed border-slate-300 bg-surface py-10 text-center text-sm text-muted sm:hidden">
+              אין משהו דחוף, באיחור או להיום 🎉
+              <br />
+              <button onClick={() => setPhoneTab("all")} className="mt-2 font-bold text-primary">
+                לכל המשימות
+              </button>
+            </p>
+          )}
+          <div className={cn("mb-8 grid gap-3 sm:gap-4 lg:grid-cols-3", phoneTab !== "today" && "hidden sm:grid")}>
             <AttentionColumn title="באיחור" icon={<AlertTriangle size={16} />} color="#dc2626" tasks={attention.overdue} empty="אין משימות באיחור 👏" spaceById={spaceById} />
             <AttentionColumn title="להיום" icon={<CalendarClock size={16} />} color="#d97706" tasks={attention.today} empty="אין משימות להיום" spaceById={spaceById} />
             <AttentionColumn title="דחוף" icon={<Zap size={16} />} color="#7c3aed" tasks={attention.urgent} empty="אין משימות דחופות" spaceById={spaceById} />
           </div>
 
           {/* every open task */}
-          <section className="mb-8">
+          <section className={cn("mb-8", phoneTab !== "all" && "hidden sm:block")}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">
+              <h2 className="hidden text-lg font-bold sm:block">
                 כל המשימות הפתוחות <span className="text-sm font-medium text-muted">({open.length})</span>
               </h2>
               <div className="flex rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="סידור המשימות">
@@ -169,7 +232,7 @@ export function DashboardView() {
               </div>
             </div>
 
-            <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="mb-4 hidden flex-wrap items-center gap-2 sm:flex">
               {PRIORITIES.map((p) => (
                 <span
                   key={p.key}
@@ -199,8 +262,8 @@ export function DashboardView() {
           </section>
 
           {/* combined calendar */}
-          <section className="mb-8">
-            <div className="mb-3 flex items-center justify-between gap-3">
+          <section className={cn("mb-8", phoneTab !== "calendar" && "hidden sm:block")}>
+            <div className="mb-3 hidden items-center justify-between gap-3 sm:flex">
               <h2 className="flex items-center gap-2 text-lg font-bold">
                 <CalendarDays size={18} className="text-slate-400" />
                 יומן
@@ -222,6 +285,131 @@ export function DashboardView() {
   );
 }
 
+function NextUpCard({
+  task,
+  space,
+  onDone,
+  onOpen,
+}: {
+  task: Task;
+  space?: Space;
+  onDone: () => void;
+  onOpen: () => void;
+}) {
+  const { today } = useData();
+  const color = space?.color ?? "#6366f1";
+  return (
+    <section
+      className="relative overflow-hidden rounded-3xl border border-line bg-surface p-5 shadow-soft sm:p-6"
+      style={{ backgroundImage: `linear-gradient(135deg, ${color}1c, transparent 55%)` }}
+    >
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold" style={{ color }}>
+        <Target size={15} />
+        הדבר הבא
+        {space && (
+          <span className="rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: color }}>
+            {space.name}
+          </span>
+        )}
+      </div>
+      <button onClick={onOpen} className="mb-2 block text-start text-xl font-bold leading-snug hover:underline sm:text-2xl">
+        {task.title}
+      </button>
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <PriorityBadge priority={task.priority} />
+        <DueLabel task={task} today={today} />
+        <TaskExtras task={task} />
+      </div>
+      {task.checklist.length > 0 && (
+        <div className="mb-4 max-w-sm">
+          <ChecklistProgressBar items={task.checklist} />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={`/focus?task=${task.id}`}
+          className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:brightness-110"
+          style={{ backgroundColor: color }}
+        >
+          <Play size={15} />
+          להתחיל עכשיו
+        </Link>
+        <button
+          onClick={onDone}
+          className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-bold text-emerald-600 transition hover:bg-emerald-50"
+        >
+          <Check size={15} />
+          סיימתי
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function TodayCard({ done, left }: { done: number; left: number }) {
+  const total = done + left;
+  const value = total ? done / total : 1;
+  return (
+    <section className="flex items-center gap-3 rounded-3xl border border-line bg-surface px-4 py-3 shadow-soft sm:gap-4 sm:p-5">
+      <span className="sm:hidden">
+        <ProgressRing value={value} size={52} stroke={6} color={left === 0 ? "#22c55e" : "var(--primary)"}>
+          <span className="text-xs font-bold tabular-nums">{total ? `${Math.round(value * 100)}%` : "✓"}</span>
+        </ProgressRing>
+      </span>
+      <span className="hidden sm:block">
+        <ProgressRing value={value} size={76} stroke={8} color={left === 0 ? "#22c55e" : "var(--primary)"}>
+          <span className="text-lg font-bold tabular-nums">{total ? `${Math.round(value * 100)}%` : "✓"}</span>
+        </ProgressRing>
+      </span>
+      <div className="min-w-0">
+        <div className="text-sm font-bold">היום שלך</div>
+        <div className="mt-0.5 text-sm text-muted sm:mt-1">
+          {left === 0 ? (done ? "סגרת הכול להיום! 🎉" : "אין משימות להיום") : `נשארו ${left} ${left === 1 ? "משימה" : "משימות"} להיום`}
+        </div>
+        <div className="mt-0.5 text-xs text-muted">{done > 0 && `נסגרו היום: ${done}`}</div>
+      </div>
+    </section>
+  );
+}
+
+function PhoneTabButton({
+  active,
+  onClick,
+  label,
+  count,
+  alert,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count?: number;
+  alert?: boolean;
+}) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-bold transition",
+        active ? "bg-ink text-surface shadow-soft" : "text-slate-500 active:bg-slate-100",
+      )}
+    >
+      {label}
+      {count !== undefined && (
+        <span
+          className={cn(
+            "min-w-5 rounded-full px-1.5 text-xs leading-5",
+            alert ? "bg-red-600 text-white" : active ? "bg-white/20" : "bg-slate-100 text-muted",
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return (
     <p className="rounded-2xl border border-dashed border-slate-300 bg-surface py-10 text-center text-sm text-muted">{children}</p>
@@ -236,7 +424,7 @@ function GroupingTab({ active, onClick, icon, label }: { active: boolean; onClic
       onClick={onClick}
       className={cn(
         "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition",
-        active ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100",
+        active ? "bg-ink text-surface shadow-soft" : "text-slate-500 hover:bg-slate-100",
       )}
     >
       {icon}
@@ -247,7 +435,7 @@ function GroupingTab({ active, onClick, icon, label }: { active: boolean; onClic
 
 function Stat({ value, label, tone }: { value: number; label: string; tone?: "bad" | "warn" | "good" }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface px-3 py-3.5 text-center shadow-sm">
+    <div className="rounded-2xl border border-line bg-surface px-3 py-3.5 text-center shadow-soft">
       <div
         className={cn(
           "text-3xl font-bold leading-none",
@@ -268,14 +456,16 @@ function PanelShell({
   header,
   children,
   footer,
+  className,
 }: {
   color: string;
   header: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
+    <section className={cn("overflow-hidden rounded-2xl border border-line bg-surface shadow-soft", className)}>
       <div className="h-1.5" style={{ backgroundColor: color }} />
       <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">{header}</header>
       <div className="px-1.5 pb-2">{children}</div>
@@ -368,6 +558,7 @@ function AttentionColumn({
   return (
     <PanelShell
       color={color}
+      className={tasks.length === 0 ? "hidden sm:block" : undefined}
       header={
         <>
           <span className="flex items-center gap-2 text-sm font-bold" style={{ color }}>

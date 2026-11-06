@@ -1,6 +1,7 @@
 "use client";
 
-import { Flag } from "lucide-react";
+import { Flag, ListChecks, Repeat } from "lucide-react";
+import { recurrenceLabel } from "@/lib/recurrence";
 import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { relativeLabel } from "@/lib/dates";
 import type { Space, Task } from "@/lib/types";
@@ -21,6 +22,35 @@ export function DueLabel({ task, today, className }: { task: Task; today: string
       {relativeLabel(task.due_date, today)}
       {task.due_time && <span className="font-normal opacity-80">, {task.due_time}</span>}
     </span>
+  );
+}
+
+/** Small badges: how many steps are ticked, and whether the task repeats. */
+export function TaskExtras({ task }: { task: Task }) {
+  const total = task.checklist.length;
+  const done = task.checklist.filter((i) => i.done).length;
+  if (!total && task.recurrence === "none") return null;
+  return (
+    <>
+      {total > 0 && (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-xs font-medium",
+            done === total ? "text-emerald-600" : "text-muted",
+          )}
+          title="צעדים שבוצעו"
+        >
+          <ListChecks size={13} />
+          {done}/{total}
+        </span>
+      )}
+      {task.recurrence !== "none" && (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary" title="משימה חוזרת">
+          <Repeat size={12} />
+          {recurrenceLabel(task.recurrence, task.recurrence_n)}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -45,8 +75,8 @@ export function TaskCard({
     <div
       onClick={onClick}
       className={cn(
-        "group relative cursor-pointer rounded-xl border border-line bg-surface p-3 shadow-sm transition",
-        "hover:border-slate-300 hover:shadow-md",
+        "group relative cursor-pointer rounded-xl border border-line bg-surface p-3 shadow-soft transition",
+        "hover:-translate-y-px hover:border-slate-300 hover:shadow-lift",
         dragging && "rotate-1 shadow-xl ring-2 ring-primary/30",
       )}
     >
@@ -78,6 +108,7 @@ export function TaskCard({
           <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <PriorityBadge priority={task.priority} small />
             <DueLabel task={task} today={today} />
+            <TaskExtras task={task} />
             {space && (
               <span className="inline-flex items-center gap-1 text-xs text-muted">
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: space.color }} />

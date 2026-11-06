@@ -1,12 +1,13 @@
 import "server-only";
 import { ensureSchema, sql } from "./db";
-import { isHHMM, isISO } from "./dates";
-import { PRIORITY_KEYS, STATUS_KEYS, VIEW_KEYS } from "./constants";
-import type { Priority, Settings, Space, Status, Task, ViewType } from "./types";
+import { addDays, diffDays, isHHMM, isISO, todayISO, utcToZoned, zonedToUtcISO } from "./dates";
+import { PRIORITY_KEYS, STATUS_KEYS, VIEW_KEYS, isClosed } from "./constants";
+import { isRecurrence, nextDueDate, sanitizeChecklist } from "./recurrence";
+import type { ChecklistItem, Priority, Recurrence, Settings, Space, Status, Task, ViewType } from "./types";
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
   to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
-  status_note, position, created_at, completed_at`;
+  status_note, checklist, recurrence, recurrence_n, position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -19,6 +20,9 @@ function mapTask(r: Record<string, unknown>): Task {
     due_date: (r.due_date as string | null) ?? null,
     due_time: (r.due_time as string | null) ?? null,
     status_note: (r.status_note as string | null) ?? "",
+    checklist: sanitizeChecklist(r.checklist),
+    recurrence: isRecurrence(r.recurrence) ? r.recurrence : "none",
+    recurrence_n: r.recurrence_n == null ? null : Number(r.recurrence_n),
     position: Number(r.position),
     created_at: new Date(r.created_at as string).toISOString(),
     completed_at: r.completed_at ? new Date(r.completed_at as string).toISOString() : null,
@@ -111,7 +115,18 @@ export interface TaskInput {
   due_date?: string | null;
   due_time?: string | null;
   status_note?: string;
+  checklist?: unknown;
+  recurrence?: string;
+  recurrence_n?: number | null;
   position?: number;
+}
+
+function cleanRecurrence(kind: unknown, n: unknown): { recurrence: Recurrence; recurrence_n: number | null } {
+  const recurrence = isRecurrence(kind) ? kind : "none";
+  const num = Number(n);
+  const recurrence_n =
+    recurrence === "every_n_days" ? (Number.isInteger(num) && num > 0 && num <= 365 ? num : 2) : null;
+  return { recurrence, recurrence_n };
 }
 
 export async function createTask(input: TaskInput): Promise<Task> {
@@ -121,20 +136,37 @@ export async function createTask(input: TaskInput): Promise<Task> {
   if (!title) throw new Error("כותרת המשימה חסרה");
   const priority = PRIORITY_KEYS.includes(input.priority as Priority) ? input.priority! : "medium";
   const status = STATUS_KEYS.includes(input.status as Status) ? input.status! : "new";
-  const due = isISO(input.due_date) ? input.due_date : null;
+  const rec = cleanRecurrence(input.recurrence, input.recurrence_n);
+  // a recurring task always has a due date: the next copy is counted from it
+  const due = isISO(input.due_date) ? input.due_date : rec.recurrence !== "none" ? todayISO() : null;
   const dueTime = due && isHHMM(input.due_time) ? input.due_time : null;
   const description = String(input.description ?? "").slice(0, 4000);
   const note = status === "not_done" ? String(input.status_note ?? "").trim().slice(0, 1000) : "";
+  const checklist = sanitizeChecklist(input.checklist ?? []);
   let position = input.position;
   if (typeof position !== "number" || !Number.isFinite(position)) {
     const [{ max }] = await db`select coalesce(max(position), 0)::float as max from ts_tasks where space_id = ${input.space_id}`;
     position = Number(max) + 1;
   }
   const rows = await db.unsafe(
-    `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9, ${status === "done" ? "now()" : "null"})
+    `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note,
+                           checklist, recurrence, recurrence_n, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
-    [input.space_id, title, description, priority, status, due, dueTime, position, note],
+    [
+      input.space_id,
+      title,
+      description,
+      priority,
+      status,
+      due,
+      dueTime,
+      position,
+      note,
+      JSON.stringify(checklist),
+      rec.recurrence,
+      rec.recurrence_n,
+    ] as never[],
   );
   return mapTask(rows[0]);
 }
@@ -148,12 +180,47 @@ export interface TaskPatch {
   due_date?: string | null;
   due_time?: string | null;
   status_note?: string;
+  checklist?: unknown;
+  recurrence?: string;
+  recurrence_n?: number | null;
   position?: number;
 }
 
 export async function updateTask(id: number, patch: TaskPatch): Promise<Task | null> {
+  return (await updateTaskFull(id, patch)).task;
+}
+
+type ReminderSnapshot = { remind_at: string; repeat: string; repeat_n: number | null };
+
+/**
+ * Applies a patch. When a recurring task becomes done, its next copy is created (with a new due date,
+ * the steps un-ticked and the reminder moved along) and returned as `spawned`.
+ */
+export async function updateTaskFull(id: number, patch: TaskPatch): Promise<{ task: Task | null; spawned: Task | null }> {
   await ensureSchema();
   const db = sql();
+  // Marking done is claimed atomically, so two clicks (or two devices) never create two next copies.
+  let completedNow = false;
+  let reminderBefore: ReminderSnapshot | null = null;
+  if (patch.status === "done") {
+    const rem = await db.unsafe(
+      `select remind_at, repeat, repeat_n from ts_reminders where task_id = $1 and enabled order by id limit 1`,
+      [id],
+    );
+    const claimed = await db.unsafe(
+      `update ts_tasks set status = 'done', completed_at = coalesce(completed_at, now()), status_note = ''
+        where id = $1 and status not in ('done', 'not_done') returning id`,
+      [id],
+    );
+    completedNow = claimed.length > 0;
+    if (rem[0]) {
+      reminderBefore = {
+        remind_at: new Date(rem[0].remind_at as string).toISOString(),
+        repeat: rem[0].repeat as string,
+        repeat_n: (rem[0].repeat_n as number | null) ?? null,
+      };
+    }
+  }
   // The note says why a "not done" task wasn't done. It is optional: the user may add it later.
   let statusNote: string | undefined;
   if (patch.status === "not_done") {
@@ -191,6 +258,15 @@ export async function updateTask(id: number, patch: TaskPatch): Promise<Task | n
     else sets.push("completed_at = null");
   }
   if (statusNote !== undefined) push("status_note", statusNote);
+  if (patch.checklist !== undefined) {
+    vals.push(JSON.stringify(sanitizeChecklist(patch.checklist)));
+    sets.push(`checklist = $${vals.length}::jsonb`);
+  }
+  if (isRecurrence(patch.recurrence)) {
+    const rec = cleanRecurrence(patch.recurrence, patch.recurrence_n);
+    push("recurrence", rec.recurrence);
+    push("recurrence_n", rec.recurrence_n);
+  }
   if (sets.length) {
     vals.push(id);
     await db.unsafe(`update ts_tasks set ${sets.join(", ")} where id = $${vals.length}`, vals as never[]);
@@ -199,7 +275,49 @@ export async function updateTask(id: number, patch: TaskPatch): Promise<Task | n
   if (patch.status === "done" || patch.status === "not_done") {
     await db`update ts_reminders set enabled = false where task_id = ${id} and enabled`;
   }
-  return getTask(id);
+  let task = await getTask(id);
+  // an open recurring task always has a date (the next copy is counted from it)
+  if (task && task.recurrence !== "none" && !task.due_date && !isClosed(task.status)) {
+    await db`update ts_tasks set due_date = ${todayISO()} where id = ${id}`;
+    task = await getTask(id);
+  }
+  let spawned: Task | null = null;
+  if (task && completedNow && task.recurrence !== "none") {
+    spawned = await spawnNext(task, reminderBefore);
+  }
+  return { task, spawned };
+}
+
+async function spawnNext(done: Task, reminder: ReminderSnapshot | null): Promise<Task> {
+  const today = todayISO();
+  const nextDue = nextDueDate(done.recurrence, done.recurrence_n, done.due_date, today)!;
+  const next = await createTask({
+    space_id: done.space_id,
+    title: done.title,
+    description: done.description,
+    priority: done.priority,
+    status: "new",
+    due_date: nextDue,
+    due_time: done.due_time,
+    checklist: done.checklist.map((i: ChecklistItem) => ({ ...i, done: false })),
+    recurrence: done.recurrence,
+    recurrence_n: done.recurrence_n,
+  });
+  if (reminder) {
+    // same time of day, and the same number of days before the due date as before
+    const r = utcToZoned(reminder.remind_at);
+    const daysBefore = done.due_date ? Math.max(0, diffDays(done.due_date, r.date)) : 0;
+    let date = addDays(nextDue, -daysBefore);
+    if (date < today) date = today;
+    let remindAt = zonedToUtcISO(date, r.time);
+    if (new Date(remindAt) <= new Date()) remindAt = zonedToUtcISO(nextDue, r.time);
+    const repeatN = reminder.repeat === "every_n_days" ? reminder.repeat_n : null;
+    await sql().unsafe(
+      `insert into ts_reminders (task_id, title, remind_at, repeat, repeat_n) values ($1, $2, $3, $4, $5)`,
+      [next.id, next.title.slice(0, 300), remindAt, reminder.repeat, repeatN] as never[],
+    );
+  }
+  return next;
 }
 
 export async function deleteTask(id: number): Promise<void> {
