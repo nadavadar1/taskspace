@@ -49,6 +49,9 @@ async function init(): Promise<void> {
     )`;
   await db`alter table ts_tasks add column if not exists due_time time`;
   await db`alter table ts_tasks add column if not exists status_note text not null default ''`;
+  await db`alter table ts_tasks add column if not exists checklist jsonb not null default '[]'::jsonb`;
+  await db`alter table ts_tasks add column if not exists recurrence text not null default 'none'`;
+  await db`alter table ts_tasks add column if not exists recurrence_n integer`;
   await db`create index if not exists ts_tasks_space_idx on ts_tasks(space_id)`;
   await db`
     create table if not exists ts_settings (

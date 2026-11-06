@@ -1,7 +1,7 @@
 "use client";
 
 import { useData } from "./DataProvider";
-import { DueLabel } from "./TaskCard";
+import { DueLabel, TaskExtras } from "./TaskCard";
 import { PriorityBadge, StatusIcon, cn } from "./ui";
 import { PRIORITY_MAP } from "@/lib/constants";
 import type { Space, Task } from "@/lib/types";
@@ -27,7 +27,7 @@ export function TaskRow({
     <button
       type="button"
       onClick={() => openTask(task.id)}
-      className="group relative flex w-full cursor-pointer items-start gap-2.5 rounded-xl py-2 pe-3 ps-4 text-start transition hover:bg-slate-50"
+      className="group relative flex w-full cursor-pointer items-start gap-2.5 rounded-xl py-2 pe-3 ps-4 text-start transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
     >
       <span className="absolute inset-y-1.5 start-0 w-1 rounded-full" style={{ backgroundColor: p.color }} aria-hidden />
       <span className="mt-0.5 shrink-0">
@@ -42,6 +42,7 @@ export function TaskRow({
             <span className="text-xs text-slate-400">ללא תאריך</span>
           )}
           {showPriority && <PriorityBadge priority={task.priority} small />}
+          <TaskExtras task={task} />
           {showSpace && space && (
             <span className={cn("inline-flex items-center gap-1 text-xs text-muted")}>
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: space.color }} />

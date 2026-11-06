@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Bell, Loader2, Trash2 } from "lucide-react";
+import { Bell, Loader2, Repeat, Trash2 } from "lucide-react";
+import { ChecklistEditor } from "./Checklist";
 import { useData } from "./DataProvider";
 import { Modal, StatusIcon, cn } from "./ui";
 import { PRIORITIES, STATUSES, isClosed } from "@/lib/constants";
 import { addDays, utcToZoned, zonedToUtcISO } from "@/lib/dates";
 import { REPEAT_LABELS, primaryReminder, taskDeadlineUTC } from "@/lib/reminder-utils";
-import type { Priority, RepeatKind, Status } from "@/lib/types";
+import { recurrenceLabel } from "@/lib/recurrence";
+import type { ChecklistItem, Priority, Recurrence, RepeatKind, Status } from "@/lib/types";
+
+const RECURRENCE_CHOICES: Recurrence[] = ["none", "daily", "weekly", "monthly", "every_n_days"];
 
 const FREQUENCIES: RepeatKind[] = ["none", "hourly", "daily", "weekly"];
 
@@ -49,6 +53,9 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [spaceId, setSpaceId] = useState<number | undefined>(
     editing?.space_id ?? defaults.space_id ?? spaces[0]?.id,
   );
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(editing?.checklist ?? []);
+  const [recurrence, setRecurrence] = useState<Recurrence>(editing?.recurrence ?? defaults.recurrence ?? "none");
+  const [recurrenceN, setRecurrenceN] = useState<number>(editing?.recurrence_n ?? defaults.recurrence_n ?? 3);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -95,6 +102,13 @@ function TaskForm({ onClose }: { onClose: () => void }) {
       return;
     }
     const noteField = status === "not_done" ? { status_note: statusNote.trim() } : {};
+    // a repeating task needs a date to count from: today when none was picked
+    const dueDate = due || (recurrence !== "none" ? today : "");
+    const extra = {
+      checklist,
+      recurrence,
+      recurrence_n: recurrence === "every_n_days" ? recurrenceN : null,
+    };
     const withReminder = remOn && !done;
     if (withReminder) {
       if (!remDate || !remTime) {
@@ -106,7 +120,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         return;
       }
       // a repeating reminder stops at the due date, so it cannot start after it
-      const deadline = taskDeadlineUTC({ due_date: due || null, due_time: due && dueTime ? dueTime : null });
+      const deadline = taskDeadlineUTC({ due_date: dueDate || null, due_time: dueDate && dueTime ? dueTime : null });
       if (remFreq !== "none" && deadline && new Date(zonedToUtcISO(remDate, remTime)) > new Date(deadline)) {
         toast("התזכורת החוזרת מתחילה אחרי תאריך היעד של המשימה");
         return;
@@ -122,8 +136,9 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         priority,
         status,
         ...noteField,
-        due_date: due || null,
-        due_time: due && dueTime ? dueTime : null,
+        ...extra,
+        due_date: dueDate || null,
+        due_time: dueDate && dueTime ? dueTime : null,
         space_id: spaceId,
       });
     } else if (taskId === null) {
@@ -134,8 +149,9 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         priority,
         status,
         ...noteField,
-        due_date: due || null,
-        due_time: due && dueTime ? dueTime : null,
+        ...extra,
+        due_date: dueDate || null,
+        due_time: dueDate && dueTime ? dueTime : null,
       });
       taskId = created?.id ?? null;
       createdId.current = taskId;
@@ -221,6 +237,10 @@ function TaskForm({ onClose }: { onClose: () => void }) {
           />
         </div>
 
+        <Field label="צעדים קטנים">
+          <ChecklistEditor items={checklist} onChange={setChecklist} />
+        </Field>
+
         <Field label="עדיפות">
           <div className="grid grid-cols-4 gap-2">
             {PRIORITIES.map((p) => (
@@ -230,7 +250,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 onClick={() => setPriority(p.key)}
                 className={cn(
                   "flex items-center justify-center gap-1.5 rounded-xl border py-2 text-sm font-medium transition",
-                  priority === p.key ? "border-transparent text-white" : "border-line bg-white text-slate-600 hover:bg-slate-50",
+                  priority === p.key ? "border-transparent text-white" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                 )}
                 style={priority === p.key ? { backgroundColor: p.color } : undefined}
               >
@@ -250,7 +270,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 onClick={() => setStatus(s.key)}
                 className={cn(
                   "flex items-center justify-center gap-1.5 rounded-xl border py-2 text-sm font-medium transition",
-                  status === s.key ? "bg-white" : "border-line bg-white text-slate-600 hover:bg-slate-50",
+                  status === s.key ? "bg-surface" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                 )}
                 style={
                   status === s.key
@@ -275,7 +295,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setStatusNote(e.target.value)}
                 rows={2}
                 placeholder="למשל: לא רלוונטי יותר, יקר מדי, הקורס נדחה, אי אפשר לבצע כרגע..."
-                className="w-full resize-none rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+                className="w-full resize-none rounded-xl border border-stone-200 bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
               />
               <p className="mt-1.5 text-xs text-muted">לא חובה: אפשר להשאיר ריק ולהוסיף אחר כך. ההערה מוצגת על המשימה.</p>
             </div>
@@ -314,7 +334,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                   {q.label}
                 </button>
               ))}
-              {due && (
+              {due && recurrence === "none" && (
                 <button
                   type="button"
                   onClick={() => changeDue("")}
@@ -326,6 +346,50 @@ function TaskForm({ onClose }: { onClose: () => void }) {
             </div>
           </Field>
 
+          <Field label="חוזרת">
+            <div className="flex flex-wrap gap-1.5">
+              {RECURRENCE_CHOICES.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => {
+                    setRecurrence(r);
+                    if (r !== "none" && !due) changeDue(today);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-medium transition",
+                    recurrence === r
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-line bg-surface text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {r !== "none" && recurrence === r && <Repeat size={13} />}
+                  {r === "every_n_days" ? "כל כמה ימים" : recurrenceLabel(r)}
+                </button>
+              ))}
+            </div>
+            {recurrence === "every_n_days" && (
+              <label className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                כל
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={recurrenceN}
+                  onChange={(e) => setRecurrenceN(Math.min(365, Math.max(1, Math.floor(Number(e.target.value)) || 1)))}
+                  className="w-20 rounded-xl border border-line bg-surface px-2 py-1.5 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+                  aria-label="מספר ימים"
+                />
+                ימים
+              </label>
+            )}
+            {recurrence !== "none" && (
+              <p className="mt-1.5 text-xs text-muted">
+                כשמסמנים &quot;הושלמה&quot;, נוצרת לבד המשימה הבאה ({recurrenceLabel(recurrence, recurrenceN)}), עם הצעדים מאופסים.
+              </p>
+            )}
+          </Field>
+
           <Field label="מרחב">
             <div className="flex flex-wrap gap-1.5">
               {spaces.map((s) => (
@@ -335,7 +399,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                   onClick={() => setSpaceId(s.id)}
                   className={cn(
                     "flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition",
-                    spaceId === s.id ? "text-white" : "border-line bg-white text-slate-600 hover:bg-slate-50",
+                    spaceId === s.id ? "text-white" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                   )}
                   style={spaceId === s.id ? { backgroundColor: s.color, borderColor: s.color } : undefined}
                 >
@@ -364,7 +428,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
               <span className={cn("relative h-6 w-11 shrink-0 rounded-full transition", remOn && !done ? "bg-amber-500" : "bg-slate-300")}>
                 <span
                   className={cn(
-                    "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+                    "absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-all",
                     remOn && !done ? "start-[1.375rem]" : "start-0.5",
                   )}
                 />
@@ -387,7 +451,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                           "rounded-xl border px-3 py-1.5 text-sm font-medium transition",
                           remFreq === f
                             ? "border-amber-500 bg-amber-500 text-white"
-                            : "border-line bg-white text-slate-600 hover:bg-slate-50",
+                            : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                         )}
                       >
                         {f === "every_n_days" ? `כל ${remN} ימים` : REPEAT_LABELS[f]}
@@ -418,14 +482,14 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                       type="date"
                       value={remDate}
                       onChange={(e) => setRemDate(e.target.value)}
-                      className="w-full rounded-xl border border-line bg-white px-3 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
                       aria-label="תאריך התזכורת"
                     />
                     <input
                       type="time"
                       value={remTime}
                       onChange={(e) => setRemTime(e.target.value)}
-                      className="w-28 shrink-0 rounded-xl border border-line bg-white px-2 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+                      className="w-28 shrink-0 rounded-xl border border-line bg-surface px-2 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
                       aria-label="שעת התזכורת"
                     />
                   </div>

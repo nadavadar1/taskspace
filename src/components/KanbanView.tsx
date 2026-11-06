@@ -64,12 +64,12 @@ function Column({
         <div className="flex items-center gap-2 text-sm font-bold">
           <StatusIcon status={status.key} size={16} />
           <span>{status.label}</span>
-          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-muted">{tasks.length}</span>
+          <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted">{tasks.length}</span>
         </div>
         {status.key !== "not_done" && (
           <button
             onClick={onAdd}
-            className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-primary"
+            className="rounded-lg p-1 text-slate-500 transition hover:bg-surface hover:text-primary"
             aria-label={`משימה חדשה ב${status.label}`}
           >
             <Plus size={16} />

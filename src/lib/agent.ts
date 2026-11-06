@@ -17,6 +17,7 @@ import {
 } from "./dates";
 import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP, isClosed } from "./constants";
 import { createTask, deleteTasks, getStudyCourses, getTask, listSpaces, listTasks, updateTask } from "./store";
+import { recurrenceLabel } from "./recurrence";
 import { createReminder, deleteReminders, listReminders, listRemindersByIds } from "./reminders";
 import type { AgentResponse, AgentScope, PendingInfo, Priority, RepeatKind, Space, Status, Task } from "./types";
 
@@ -86,7 +87,8 @@ ${coursesBlock}
 - תשובות קצרות וברורות. לא יותר מ-3 פריטים ברשימה, גם אם יש יותר (ציין "ועוד N").
 - כשהמשתמש שואל מה חשוב, במה להתחיל או מבקש תכנון/סיכום – הצע צעד אחד קונקרטי להתחיל ממנו עכשיו, בניסוח של פעולה ("לפתוח את המצגת ולכתוב שקף ראשון"). אחרי פעולות פשוטות (הוספה, עדכון, מחיקה) אל תוסיף הצעת צעד, רק דווח מה בוצע.
 - חגוג השלמות בקצרה. אל תאשים ואל תלחץ על איחורים – הצע לתזמן מחדש.
-- כשמשימה גדולה או מעורפלת: הצע לפרק אותה ל-3 עד 5 צעדים קטנים (עד 10 דקות כל אחד), ואם המשתמש מבקש – הוסף אותם כמשימות עם add_tasks, בניסוח שמתחיל בפועל.
+- כשמשימה גדולה או מעורפלת: הצע לפרק אותה ל-3 עד 5 צעדים קטנים (עד 10 דקות כל אחד), ואם המשתמש מבקש – שמור אותם כצעדים בתוך המשימה (checklist ב-update_tasks, או ב-add_tasks למשימה חדשה), בניסוח שמתחיל בפועל.
+- משימה שחוזרת על עצמה ("כל כמה ימים", "כל שבוע", "כל יום ראשון") – משימה אחת עם recurrence, לא כמה עותקים. כשמסמנים אותה כהושלמה, המערכת יוצרת לבד את הבאה.
 - לשאלות כמו "מה לעשות עכשיו" או "במה להתחיל" – השתמש ב-daily_briefing והמלץ על משימה אחת ראשונה, ואחריה עוד עד שתיים.`;
 }
 
@@ -141,6 +143,18 @@ const TOOLS = [
                 status: { type: "string", enum: STATUS_KEYS },
                 due_date: { type: "string", description: "YYYY-MM-DD" },
                 due_time: { type: "string", description: "HH:MM, Israel time. Only meaningful together with due_date." },
+                recurrence: {
+                  type: "string",
+                  enum: ["none", "daily", "weekly", "monthly", "every_n_days"],
+                  description:
+                    "For a repeating chore (e.g. 'every 3 days', 'every Sunday'): when it is marked done, a new copy with the next due date is created automatically. every_n_days needs recurrence_n.",
+                },
+                recurrence_n: { type: "integer", description: "Days between copies, only for every_n_days." },
+                checklist: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Small concrete steps, only when the user lists them or asks to break the task down.",
+                },
                 reminder_minutes_before: {
                   type: "integer",
                   description:
@@ -181,6 +195,13 @@ const TOOLS = [
               due_date: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear (also clears due_time)" },
               due_time: { type: ["string", "null"], description: "HH:MM, Israel time, or null to clear" },
               shift_days: { type: "integer", description: "Move the due date by N days (negative = earlier)" },
+              recurrence: { type: "string", enum: ["none", "daily", "weekly", "monthly", "every_n_days"] },
+              recurrence_n: { type: "integer", description: "Days between copies, only for every_n_days." },
+              checklist: {
+                type: "array",
+                items: { type: "string" },
+                description: "Replaces the task's small steps (all un-ticked). Only when the user asks.",
+              },
               space: { type: "string", description: "Move to this space (name)" },
             },
           },
@@ -388,6 +409,10 @@ function compact(t: Task, ctx: Ctx) {
     due_time: t.due_time,
     overdue: !!t.due_date && t.due_date < ctx.today && !isClosed(t.status),
     ...(t.status === "not_done" ? { not_done_reason: t.status_note } : {}),
+    ...(t.recurrence !== "none" ? { repeats: recurrenceLabel(t.recurrence, t.recurrence_n) } : {}),
+    ...(t.checklist.length
+      ? { steps: `${t.checklist.filter((i) => i.done).length}/${t.checklist.length}: ${t.checklist.map((i) => (i.done ? "✓" : "○") + i.text).join("; ")}` }
+      : {}),
   };
 }
 
@@ -551,6 +576,9 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
           status: typeof item.status === "string" ? item.status : "new",
           due_date: dueDate,
           due_time: dueTime,
+          recurrence: typeof item.recurrence === "string" ? item.recurrence : undefined,
+          recurrence_n: typeof item.recurrence_n === "number" ? item.recurrence_n : null,
+          checklist: Array.isArray(item.checklist) ? item.checklist : undefined,
         });
         created.push(compact(t, ctx));
         const minutesBefore = Number(item.reminder_minutes_before);
@@ -600,6 +628,9 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
           patch.due_date = addDays(t.due_date ?? ctx.today, Math.trunc(changes.shift_days));
         }
         if (changes.due_time !== undefined) patch.due_time = changes.due_time;
+        if (typeof changes.recurrence === "string") patch.recurrence = changes.recurrence;
+        if (typeof changes.recurrence_n === "number") patch.recurrence_n = changes.recurrence_n;
+        if (Array.isArray(changes.checklist)) patch.checklist = changes.checklist;
         if (targetSpace) patch.space_id = targetSpace.id;
         const nt = await updateTask(t.id, patch);
         if (nt) updated.push(compact(nt, ctx));

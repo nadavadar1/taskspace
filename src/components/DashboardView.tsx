@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { AlertTriangle, CalendarClock, CalendarDays, Check, Flag, Layers, Plus, Sparkles, Zap } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarDays, Check, Flag, Layers, Play, Plus, Sparkles, Target, Zap } from "lucide-react";
 import { useData } from "./DataProvider";
 import { CalendarView } from "./CalendarView";
 import { TaskRow } from "./TaskRow";
-import { cn, useLocalChoice, useMounted } from "./ui";
+import { QuickAdd } from "./QuickAdd";
+import { DueLabel, TaskExtras } from "./TaskCard";
+import { ChecklistProgressBar } from "./Checklist";
+import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
+import { focusQueue } from "@/lib/focus";
 import { PRIORITIES, PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Priority, Space, Task } from "@/lib/types";
@@ -32,7 +36,8 @@ const byImportance = (a: Task, b: Task) => rank(a) - rank(b) || dueKey(a).locale
 const byDue = (a: Task, b: Task) => dueKey(a).localeCompare(dueKey(b)) || rank(a) - rank(b) || a.id - b.id;
 
 export function DashboardView() {
-  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent } = useData();
+  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent, patchTask, openTask } =
+    useData();
   const [grouping, setGrouping] = useLocalChoice<Grouping>("dashboard-grouping", "space", GROUPINGS);
 
   const selected = useMemo(() => {
@@ -67,6 +72,11 @@ export function DashboardView() {
   const doneThisWeek = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
+  const nextUp = useMemo(() => focusQueue(open, today)[0], [open, today]);
+  const closedToday = scoped.filter(
+    (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
+  ).length;
+  const leftToday = open.filter((t) => t.due_date && t.due_date <= today).length;
   const byPriority = useMemo(
     () => Object.fromEntries(PRIORITIES.map((p) => [p.key, open.filter((t) => t.priority === p.key)])) as Record<Priority, Task[]>,
     [open],
@@ -90,7 +100,7 @@ export function DashboardView() {
           <button
             onClick={() => openNewTask()}
             disabled={!spaces.length}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-600 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:bg-indigo-600 disabled:opacity-50"
           >
             <Plus size={16} />
             משימה חדשה
@@ -111,6 +121,27 @@ export function DashboardView() {
         </div>
       ) : (
         <>
+          {/* hero: the one next thing + today's progress */}
+          <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            {nextUp ? (
+              <NextUpCard
+                task={nextUp}
+                space={spaceById.get(nextUp.space_id)}
+                onDone={() => patchTask(nextUp.id, { status: "done" })}
+                onOpen={() => openTask(nextUp.id)}
+              />
+            ) : (
+              <div className="flex items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-surface p-8 text-center text-muted">
+                אין משימות פתוחות. כל הכבוד! 🎉
+              </div>
+            )}
+            <TodayCard done={closedToday} left={leftToday} />
+          </div>
+
+          <div className="mb-6">
+            <QuickAdd />
+          </div>
+
           {/* space picker */}
           <div className="mb-5 flex flex-wrap items-center gap-2">
             <span className="me-1 text-sm font-medium text-slate-500">מציג:</span>
@@ -118,7 +149,7 @@ export function DashboardView() {
               onClick={() => setDashboardSpaces(null)}
               className={cn(
                 "rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
-                allSelected ? "border-slate-900 bg-slate-900 text-white" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
+                allSelected ? "border-ink bg-ink text-surface" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
               )}
             >
               כל המרחבים
@@ -222,6 +253,86 @@ export function DashboardView() {
   );
 }
 
+function NextUpCard({
+  task,
+  space,
+  onDone,
+  onOpen,
+}: {
+  task: Task;
+  space?: Space;
+  onDone: () => void;
+  onOpen: () => void;
+}) {
+  const { today } = useData();
+  const color = space?.color ?? "#6366f1";
+  return (
+    <section
+      className="relative overflow-hidden rounded-3xl border border-line bg-surface p-5 shadow-soft sm:p-6"
+      style={{ backgroundImage: `linear-gradient(135deg, ${color}1c, transparent 55%)` }}
+    >
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold" style={{ color }}>
+        <Target size={15} />
+        הדבר הבא
+        {space && (
+          <span className="rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: color }}>
+            {space.name}
+          </span>
+        )}
+      </div>
+      <button onClick={onOpen} className="mb-2 block text-start text-xl font-bold leading-snug hover:underline sm:text-2xl">
+        {task.title}
+      </button>
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <PriorityBadge priority={task.priority} />
+        <DueLabel task={task} today={today} />
+        <TaskExtras task={task} />
+      </div>
+      {task.checklist.length > 0 && (
+        <div className="mb-4 max-w-sm">
+          <ChecklistProgressBar items={task.checklist} />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={`/focus?task=${task.id}`}
+          className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:brightness-110"
+          style={{ backgroundColor: color }}
+        >
+          <Play size={15} />
+          להתחיל עכשיו
+        </Link>
+        <button
+          onClick={onDone}
+          className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-bold text-emerald-600 transition hover:bg-emerald-50"
+        >
+          <Check size={15} />
+          סיימתי
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function TodayCard({ done, left }: { done: number; left: number }) {
+  const total = done + left;
+  const value = total ? done / total : 1;
+  return (
+    <section className="flex items-center gap-4 rounded-3xl border border-line bg-surface p-5 shadow-soft">
+      <ProgressRing value={value} size={88} stroke={9} color={left === 0 ? "#22c55e" : "var(--primary)"}>
+        <span className="text-lg font-bold tabular-nums">{total ? `${Math.round(value * 100)}%` : "✓"}</span>
+      </ProgressRing>
+      <div className="min-w-0">
+        <div className="text-sm font-bold">היום שלך</div>
+        <div className="mt-1 text-sm text-muted">
+          {left === 0 ? (done ? "סגרת הכול להיום! 🎉" : "אין משימות להיום") : `נשארו ${left} ${left === 1 ? "משימה" : "משימות"} להיום`}
+        </div>
+        <div className="mt-0.5 text-xs text-muted">{done > 0 && `נסגרו היום: ${done}`}</div>
+      </div>
+    </section>
+  );
+}
+
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return (
     <p className="rounded-2xl border border-dashed border-slate-300 bg-surface py-10 text-center text-sm text-muted">{children}</p>
@@ -236,7 +347,7 @@ function GroupingTab({ active, onClick, icon, label }: { active: boolean; onClic
       onClick={onClick}
       className={cn(
         "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition",
-        active ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100",
+        active ? "bg-ink text-surface shadow-soft" : "text-slate-500 hover:bg-slate-100",
       )}
     >
       {icon}
@@ -247,7 +358,7 @@ function GroupingTab({ active, onClick, icon, label }: { active: boolean; onClic
 
 function Stat({ value, label, tone }: { value: number; label: string; tone?: "bad" | "warn" | "good" }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface px-3 py-3.5 text-center shadow-sm">
+    <div className="rounded-2xl border border-line bg-surface px-3 py-3.5 text-center shadow-soft">
       <div
         className={cn(
           "text-3xl font-bold leading-none",
@@ -275,7 +386,7 @@ function PanelShell({
   footer?: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-soft">
       <div className="h-1.5" style={{ backgroundColor: color }} />
       <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">{header}</header>
       <div className="px-1.5 pb-2">{children}</div>

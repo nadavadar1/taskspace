@@ -61,7 +61,7 @@ export function LoginForm({ configured }: { configured: boolean }) {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-line bg-white py-2.5 pe-3 ps-9 outline-none transition focus:border-primary focus:ring-4 focus:ring-indigo-100"
+            className="w-full rounded-xl border border-line bg-surface py-2.5 pe-3 ps-9 outline-none transition focus:border-primary focus:ring-4 focus:ring-indigo-100"
             placeholder="הקלד סיסמה"
           />
         </div>

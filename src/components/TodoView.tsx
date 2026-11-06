@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useData } from "./DataProvider";
-import { DueLabel } from "./TaskCard";
+import { DueLabel, TaskExtras } from "./TaskCard";
+import { QuickAdd } from "./QuickAdd";
 import { StatusIcon, cn } from "./ui";
 import { PRIORITIES, PRIORITY_MAP, STATUS_MAP, isClosed } from "@/lib/constants";
-import type { Priority, Space, Task } from "@/lib/types";
+import type { Space, Task } from "@/lib/types";
 
 function byDueThenPosition(a: Task, b: Task) {
   if (a.due_date && b.due_date && a.due_date !== b.due_date) return a.due_date < b.due_date ? -1 : 1;
@@ -81,6 +82,9 @@ function Row({ task }: { task: Task }) {
           </span>
         )}
       </span>
+      <span className="hidden items-center gap-2 sm:flex">
+        <TaskExtras task={task} />
+      </span>
       {!isClosed(task.status) && task.status !== "new" && (
         <span className="hidden text-xs font-medium sm:inline" style={{ color: STATUS_MAP[task.status].color }}>
           {STATUS_MAP[task.status].label}
@@ -92,8 +96,7 @@ function Row({ task }: { task: Task }) {
 }
 
 export function TodoView({ space }: { space: Space }) {
-  const { tasks, openNewTask, addTask } = useData();
-  const [quick, setQuick] = useState("");
+  const { tasks } = useData();
   const [showDone, setShowDone] = useState(false);
   const [showNotDone, setShowNotDone] = useState(true);
 
@@ -107,30 +110,10 @@ export function TodoView({ space }: { space: Space }) {
     tasks: open.filter((t) => t.priority === p.key).sort(byDueThenPosition),
   })).filter((g) => g.tasks.length);
 
-  async function addQuick() {
-    const title = quick.trim();
-    if (!title) return;
-    setQuick("");
-    await addTask({ space_id: space.id, title, priority: "medium" as Priority });
-  }
-
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-5 flex items-center gap-2 rounded-2xl border border-line bg-surface p-2 shadow-sm focus-within:border-primary focus-within:ring-4 focus-within:ring-indigo-100">
-        <Plus size={18} className="ms-2 text-muted" />
-        <input
-          value={quick}
-          onChange={(e) => setQuick(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addQuick()}
-          placeholder="הוסף משימה מהירה והקש Enter..."
-          className="min-w-0 flex-1 bg-transparent py-1.5 text-[15px] outline-none"
-        />
-        <button
-          onClick={() => (quick.trim() ? addQuick() : openNewTask({ space_id: space.id }))}
-          className="rounded-xl bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
-        >
-          {quick.trim() ? "הוספה" : "עוד אפשרויות"}
-        </button>
+      <div className="mb-5">
+        <QuickAdd spaceId={space.id} />
       </div>
 
       {groups.length === 0 && (
@@ -147,7 +130,7 @@ export function TodoView({ space }: { space: Space }) {
               {g.label}
               <span className="text-xs font-medium text-muted">{g.tasks.length}</span>
             </h3>
-            <ul className="rounded-2xl border border-line bg-surface p-1 shadow-sm">
+            <ul className="rounded-2xl border border-line bg-surface p-1 shadow-soft">
               {g.tasks.map((t) => (
                 <Row key={t.id} task={t} />
               ))}
@@ -166,7 +149,7 @@ export function TodoView({ space }: { space: Space }) {
               <span className="text-xs font-medium">{notDone.length}</span>
             </button>
             {showNotDone && (
-              <ul className="anim-fade rounded-2xl border border-line bg-surface p-1 shadow-sm">
+              <ul className="anim-fade rounded-2xl border border-line bg-surface p-1 shadow-soft">
                 {notDone.map((t) => (
                   <Row key={t.id} task={t} />
                 ))}
@@ -186,7 +169,7 @@ export function TodoView({ space }: { space: Space }) {
               <span className="text-xs font-medium">{done.length}</span>
             </button>
             {showDone && (
-              <ul className="anim-fade rounded-2xl border border-line bg-surface p-1 shadow-sm">
+              <ul className="anim-fade rounded-2xl border border-line bg-surface p-1 shadow-soft">
                 {done.map((t) => (
                   <Row key={t.id} task={t} />
                 ))}

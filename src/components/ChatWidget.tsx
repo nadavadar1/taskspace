@@ -234,11 +234,11 @@ export function ChatWidget() {
       {!chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
-          className="anim-pop group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-40 flex items-center gap-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 py-3.5 pe-5 ps-4 text-white shadow-xl shadow-indigo-300/50 transition hover:scale-[1.03] hover:shadow-2xl"
+          className="anim-pop group fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 p-3 text-white shadow-lift transition hover:scale-[1.03] sm:bottom-[max(1.25rem,env(safe-area-inset-bottom))] sm:right-5 sm:py-3.5 sm:pe-5 sm:ps-4"
           aria-label="פתיחת צ'אט עם הסוכן"
         >
           <Sparkles size={22} />
-          <span className="text-sm font-bold">שאל את הסוכן</span>
+          <span className="hidden text-sm font-bold sm:inline">שאל את הסוכן</span>
         </button>
       )}
 
@@ -294,7 +294,7 @@ export function ChatWidget() {
               >
                 <span className="flex items-center gap-2">
                   <span className="text-white/80">עובד עכשיו על:</span>
-                  <span className="flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-ink">
+                  <span className="flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-0.5 text-xs font-bold text-ink">
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: scopeSpace?.color ?? "#6366f1" }}
@@ -306,7 +306,7 @@ export function ChatWidget() {
                 <ChevronDown size={16} className={cn("transition", pickerOpen && "rotate-180")} />
               </button>
               {pickerOpen && (
-                <div className="anim-pop absolute inset-x-0 top-full z-10 mt-1.5 overflow-hidden rounded-xl bg-white py-1 text-ink shadow-xl">
+                <div className="anim-pop absolute inset-x-0 top-full z-10 mt-1.5 overflow-hidden rounded-xl bg-surface py-1 text-ink shadow-xl">
                   <ScopeOption
                     label="כל המרחבים"
                     color="#6366f1"
@@ -360,7 +360,7 @@ export function ChatWidget() {
                     <button
                       key={s.label}
                       onClick={() => send(s.text)}
-                      className="rounded-xl border border-line bg-white px-3.5 py-2.5 text-start text-sm font-medium transition hover:border-primary hover:text-primary"
+                      className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-start text-sm font-medium transition hover:border-primary hover:text-primary"
                     >
                       {s.label}
                     </button>
@@ -378,7 +378,7 @@ export function ChatWidget() {
                       ? "rounded-ss-md bg-primary text-white"
                       : m.error
                         ? "rounded-se-md border border-red-200 bg-red-50 text-red-700"
-                        : "rounded-se-md border border-line bg-white shadow-sm",
+                        : "rounded-se-md border border-line bg-surface shadow-sm",
                   )}
                 >
                   <Rich text={m.content} />
@@ -428,7 +428,7 @@ export function ChatWidget() {
                         <button
                           onClick={() => decide(m.id, false)}
                           disabled={loading}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-surface py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                         >
                           <XCircle size={16} />
                           בטל
@@ -450,7 +450,7 @@ export function ChatWidget() {
 
             {loading && (
               <div className="flex justify-end">
-                <div className="flex items-center gap-1 rounded-2xl rounded-se-md border border-line bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-1 rounded-2xl rounded-se-md border border-line bg-surface px-4 py-3 shadow-sm">
                   {[0, 1, 2].map((i) => (
                     <span
                       key={i}
@@ -465,7 +465,7 @@ export function ChatWidget() {
 
           {/* composer */}
           <div className="border-t border-line bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-end gap-2 rounded-2xl border border-line bg-white p-1.5 transition focus-within:border-primary focus-within:ring-4 focus-within:ring-indigo-100">
+            <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface p-1.5 transition focus-within:border-primary focus-within:ring-4 focus-within:ring-indigo-100">
               <textarea
                 ref={inputRef}
                 value={input}

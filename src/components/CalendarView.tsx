@@ -55,7 +55,7 @@ function Chip({
       style={{
         backgroundColor: `${tint}${spaceColor ? "33" : "1f"}`,
         borderColor: tint,
-        color: "#1e2433",
+        color: "var(--ink)",
       }}
       title={notDone && task.status_note ? `${task.title} — לא בוצעה: ${task.status_note}` : task.title}
     >
@@ -339,7 +339,7 @@ export function CalendarView({ spaces }: { spaces: Space[] }) {
 
       {dayList && (
         <div
-          className="anim-fade fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4"
+          className="anim-fade fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
           onMouseDown={(e) => e.target === e.currentTarget && setDayList(null)}
         >
           <div className="anim-pop w-full max-w-sm rounded-2xl bg-surface p-4 shadow-2xl">

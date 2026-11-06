@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guarded, readJson } from "@/lib/api";
-import { deleteTask, updateTask, type TaskPatch } from "@/lib/store";
+import { deleteTask, updateTaskFull, type TaskPatch } from "@/lib/store";
 
 type Ctx = RouteContext<"/api/tasks/[id]">;
 
@@ -17,9 +17,12 @@ export const PATCH = guarded<Ctx>(async (req, ctx) => {
   if (typeof body.status_note === "string") patch.status_note = body.status_note;
   if (typeof body.space_id === "number") patch.space_id = body.space_id;
   if (typeof body.position === "number") patch.position = body.position;
-  const task = await updateTask(id, patch);
+  if (Array.isArray(body.checklist)) patch.checklist = body.checklist;
+  if (typeof body.recurrence === "string") patch.recurrence = body.recurrence;
+  if (body.recurrence_n === null || typeof body.recurrence_n === "number") patch.recurrence_n = body.recurrence_n;
+  const { task, spawned } = await updateTaskFull(id, patch);
   if (!task) return NextResponse.json({ error: "המשימה לא נמצאה" }, { status: 404 });
-  return NextResponse.json({ task });
+  return NextResponse.json({ task, spawned });
 });
 
 export const DELETE = guarded<Ctx>(async (_req, ctx) => {
