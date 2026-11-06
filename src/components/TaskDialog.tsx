@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, Loader2, Repeat, Trash2 } from "lucide-react";
 import { ChecklistEditor } from "./Checklist";
 import { useData } from "./DataProvider";
@@ -72,6 +72,20 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const createdId = useRef<number | null>(null);
   const done = isClosed(status); // done or not done: no reminders any more
   const frequencies: RepeatKind[] = existingReminder?.repeat === "every_n_days" ? [...FREQUENCIES, "every_n_days"] : FREQUENCIES;
+
+  // sideways chip rows (phone): bring the chosen chip into view when the form opens
+  const formRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    formRef.current?.querySelectorAll<HTMLElement>("[data-chosen=true]").forEach((el) => {
+      const row = el.parentElement;
+      if (!row || row.scrollWidth <= row.clientWidth) return;
+      const e = el.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      // only when it is cut off; scrolls the row sideways, never the form
+      if (e.left < r.left) row.scrollLeft -= r.left - e.left + 20;
+      else if (e.right > r.right) row.scrollLeft += e.right - r.right + 20;
+    });
+  }, []);
 
   function changeTitle(v: string) {
     setTitle(v);
@@ -225,7 +239,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         </div>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-5" ref={formRef}>
         <div>
           <input
             autoFocus={!editing}
@@ -249,7 +263,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 type="button"
                 onClick={() => setPriority(p.key)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 rounded-xl border py-2 text-sm font-medium transition",
+                  "flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-medium transition sm:py-2",
                   priority === p.key ? "border-transparent text-white" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                 )}
                 style={priority === p.key ? { backgroundColor: p.color } : undefined}
@@ -262,14 +276,15 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         </Field>
 
         <Field label="סטטוס">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="scroll-thin -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:grid sm:grid-cols-5">
             {STATUSES.map((s) => (
               <button
                 key={s.key}
                 type="button"
+                data-chosen={status === s.key}
                 onClick={() => setStatus(s.key)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 rounded-xl border py-2 text-sm font-medium transition",
+                  "flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition sm:px-0 sm:py-2",
                   status === s.key ? "bg-surface" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                 )}
                 style={
@@ -327,7 +342,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                   type="button"
                   onClick={() => changeDue(q.value)}
                   className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium transition",
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition sm:px-2.5 sm:py-1 sm:text-xs",
                     due === q.value ? "bg-primary text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
                   )}
                 >
@@ -347,17 +362,18 @@ function TaskForm({ onClose }: { onClose: () => void }) {
           </Field>
 
           <Field label="חוזרת">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="scroll-thin -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
               {RECURRENCE_CHOICES.map((r) => (
                 <button
                   key={r}
                   type="button"
+                  data-chosen={recurrence === r}
                   onClick={() => {
                     setRecurrence(r);
                     if (r !== "none" && !due) changeDue(today);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-medium transition",
+                    "flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition sm:py-1.5",
                     recurrence === r
                       ? "border-primary bg-primary-soft text-primary"
                       : "border-line bg-surface text-slate-600 hover:bg-slate-50",
@@ -391,14 +407,15 @@ function TaskForm({ onClose }: { onClose: () => void }) {
           </Field>
 
           <Field label="מרחב">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="scroll-thin -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
               {spaces.map((s) => (
                 <button
                   key={s.id}
                   type="button"
+                  data-chosen={spaceId === s.id}
                   onClick={() => setSpaceId(s.id)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition",
+                    "flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition",
                     spaceId === s.id ? "text-white" : "border-line bg-surface text-slate-600 hover:bg-slate-50",
                   )}
                   style={spaceId === s.id ? { backgroundColor: s.color, borderColor: s.color } : undefined}

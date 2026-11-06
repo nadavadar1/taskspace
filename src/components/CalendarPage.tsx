@@ -23,7 +23,7 @@ export function CalendarPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-5 hidden flex-wrap items-end justify-between gap-3 sm:flex">
         <div>
           <h1 className="text-2xl font-bold">יומן</h1>
           <p className="text-sm text-muted">כל המרחבים ביחד, כל אחד בצבע שלו</p>
@@ -39,8 +39,8 @@ export function CalendarPage() {
       </div>
 
       {spaces.length > 1 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="me-1 text-sm font-medium text-slate-500">מציג:</span>
+        <div className="scroll-thin -mx-3 mb-4 flex items-center gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+          <span className="me-1 hidden text-sm font-medium text-slate-500 sm:inline">מציג:</span>
           {spaces.map((s) => {
             const on = !hidden.includes(s.id);
             return (
@@ -48,7 +48,7 @@ export function CalendarPage() {
                 key={s.id}
                 onClick={() => toggle(s.id)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
+                  "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition",
                   on ? "text-white" : "border-line bg-surface text-slate-500 hover:bg-slate-50",
                 )}
                 style={on ? { backgroundColor: s.color, borderColor: s.color } : undefined}

@@ -89,13 +89,16 @@ export function Modal({
     >
       <div
         className={cn(
-          "anim-pop flex max-h-[92vh] w-full flex-col rounded-t-3xl bg-surface shadow-2xl sm:rounded-3xl",
+          "anim-slide flex max-h-[94dvh] w-full flex-col rounded-t-3xl bg-surface shadow-2xl sm:max-h-[92vh] sm:rounded-3xl",
           maxWidth,
         )}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+        <div className="flex justify-center pt-2 sm:hidden" aria-hidden>
+          <span className="h-1.5 w-10 rounded-full bg-slate-200" />
+        </div>
+        <div className="flex items-center justify-between border-b border-line px-5 py-3 sm:py-4">
           <h2 className="text-lg font-bold">{title}</h2>
           <button
             onClick={onClose}
@@ -106,7 +109,7 @@ export function Modal({
           </button>
         </div>
         <div className="scroll-thin flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="border-t border-line px-5 py-3">{footer}</div>}
+        {footer && <div className="border-t border-line px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-3">{footer}</div>}
       </div>
     </div>
   );
@@ -330,5 +333,58 @@ export function Kbd({ children }: { children: React.ReactNode }) {
     <kbd className="rounded-md border border-line bg-surface-2 px-1.5 py-0.5 font-sans text-[11px] font-medium text-muted">
       {children}
     </kbd>
+  );
+}
+
+/* ------------------------------ phone ------------------------------ */
+
+const PHONE_QUERY = "(max-width: 639px)";
+const subscribePhone = (cb: () => void) => {
+  const m = window.matchMedia(PHONE_QUERY);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+};
+
+/** True on a phone-sized screen. False while rendering on the server, so use it only in parts drawn after mount. */
+export function useIsPhone(): boolean {
+  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
+}
+
+/** A sheet that slides up from the bottom on a phone (a centred card on a computer). */
+export function Sheet({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div
+      className="anim-fade fixed inset-0 z-50 flex items-end justify-center bg-black/45 backdrop-blur-[2px] sm:items-center sm:p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="anim-slide w-full max-w-md rounded-t-3xl bg-surface pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:rounded-3xl"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex justify-center pt-2.5 sm:hidden" aria-hidden>
+          <span className="h-1.5 w-10 rounded-full bg-slate-200" />
+        </div>
+        {title && <div className="px-5 pb-1 pt-3 text-lg font-bold">{title}</div>}
+        <div className="scroll-thin max-h-[75vh] overflow-y-auto px-3 pb-2 pt-1">{children}</div>
+      </div>
+    </div>
   );
 }

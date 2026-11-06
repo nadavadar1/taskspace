@@ -234,11 +234,11 @@ export function ChatWidget() {
       {!chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
-          className="anim-pop group fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 p-3 text-white shadow-lift transition hover:scale-[1.03] sm:bottom-[max(1.25rem,env(safe-area-inset-bottom))] sm:right-5 sm:py-3.5 sm:pe-5 sm:ps-4"
+          className="anim-pop group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-40 hidden items-center gap-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 py-3.5 pe-5 ps-4 text-white shadow-lift transition hover:scale-[1.03] sm:flex"
           aria-label="פתיחת צ'אט עם הסוכן"
         >
           <Sparkles size={22} />
-          <span className="hidden text-sm font-bold sm:inline">שאל את הסוכן</span>
+          <span className="text-sm font-bold">שאל את הסוכן</span>
         </button>
       )}
 

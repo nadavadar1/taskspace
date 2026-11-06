@@ -14,7 +14,8 @@ import {
 } from "@dnd-kit/core";
 import { Bell, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useData } from "./DataProvider";
-import { cn, StatusIcon } from "./ui";
+import { cn, StatusIcon, useIsPhone } from "./ui";
+import { PhoneCalendar } from "./PhoneCalendar";
 import { PRIORITY_MAP, isClosed } from "@/lib/constants";
 import { HE_DAYS, HE_MONTHS, monthGrid, parts, formatLong } from "@/lib/dates";
 import { reminderFiresOn } from "@/lib/reminder-utils";
@@ -172,6 +173,11 @@ function DayCell({
  * (the dashboard) every task gets a dot in its space's colour.
  */
 export function CalendarView({ spaces }: { spaces: Space[] }) {
+  const phone = useIsPhone();
+  return phone ? <PhoneCalendar spaces={spaces} /> : <MonthCalendar spaces={spaces} />;
+}
+
+function MonthCalendar({ spaces }: { spaces: Space[] }) {
   const { tasks, reminders, today, patchTask, openTask, openNewTask } = useData();
   const { y: ty, m: tm } = parts(today);
   const [cursor, setCursor] = useState({ y: ty, m: tm });

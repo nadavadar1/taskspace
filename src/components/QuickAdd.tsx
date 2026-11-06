@@ -108,7 +108,7 @@ export function QuickAdd({
               void submit();
             }
           }}
-          placeholder={`הוספה מהירה, למשל: "${EXAMPLES[0]}"`}
+          placeholder={compact ? "מה צריך לעשות?" : `הוספה מהירה, למשל: "${EXAMPLES[0]}"`}
           aria-label="הוספה מהירה של משימה"
           data-quick-add
           className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-slate-400"
@@ -171,7 +171,7 @@ export function QuickAdd({
       )}
 
       {!has && !compact && (
-        <p className="flex items-center gap-1.5 px-2 pb-1 pt-1 text-[11px] text-muted">
+        <p className="hidden items-center gap-1.5 px-2 pb-1 pt-1 text-[11px] text-muted sm:flex">
           <Sparkles size={12} className="shrink-0" />
           <span>
             מבין לבד: היום / מחר / יום חמישי / 12.11, שעה (18:00), דחוף / חשוב, ״כל 3 ימים״, ו-#מרחב
