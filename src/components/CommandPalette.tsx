@@ -42,7 +42,7 @@ export function CommandPalette() {
 }
 
 function Palette({ onClose }: { onClose: () => void }) {
-  const { tasks, spaces, today, openTask, addTask, askAgent, setQuickAddOpen, toast } = useData();
+  const { tasks, spaces, today, openTask, addTask, askAgent, setQuickAddOpen, toast, isTodo } = useData();
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const [theme, setTheme] = useTheme();
@@ -98,7 +98,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         group: "מרחבים",
         icon: <span className="block h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />,
         label: s.name,
-        hint: `${tasks.filter((t) => t.space_id === s.id && !isClosed(t.status)).length} פתוחות`,
+        hint: `${tasks.filter((t) => t.space_id === s.id && isTodo(t)).length} פתוחות`,
         run: go(`/space/${s.id}`),
       });
     }
@@ -166,7 +166,7 @@ function Palette({ onClose }: { onClose: () => void }) {
       );
     }
     return out;
-  }, [q, tasks, spaces, today, spaceById, router, onClose, openTask, addTask, askAgent, setQuickAddOpen, toast, theme, setTheme]);
+  }, [q, tasks, spaces, today, spaceById, router, onClose, openTask, addTask, askAgent, setQuickAddOpen, toast, theme, setTheme, isTodo]);
 
   const safeActive = Math.min(active, Math.max(0, items.length - 1));
 

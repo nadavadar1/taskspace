@@ -8,7 +8,7 @@ import { KanbanView } from "./KanbanView";
 import { TodoView } from "./TodoView";
 import { CalendarView } from "./CalendarView";
 import { cn, useMounted } from "./ui";
-import { VIEWS, isClosed } from "@/lib/constants";
+import { VIEWS } from "@/lib/constants";
 import type { ViewType } from "@/lib/types";
 
 const ICONS: Record<ViewType, React.ReactNode> = {
@@ -18,7 +18,7 @@ const ICONS: Record<ViewType, React.ReactNode> = {
 };
 
 export function SpaceView({ id }: { id: number }) {
-  const { spaces, tasks, patchSpace, openNewTask, openSpaceDialog } = useData();
+  const { spaces, tasks, patchSpace, openNewTask, openSpaceDialog, isTodo } = useData();
   const space = spaces.find((s) => s.id === id);
   const mounted = useMounted();
   const calendarSpaces = useMemo(() => (space ? [space] : []), [space]);
@@ -34,7 +34,7 @@ export function SpaceView({ id }: { id: number }) {
     );
   }
 
-  const open = tasks.filter((t) => t.space_id === space.id && !isClosed(t.status)).length;
+  const open = tasks.filter((t) => t.space_id === space.id && isTodo(t)).length;
 
   return (
     <div>

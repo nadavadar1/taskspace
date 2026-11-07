@@ -113,7 +113,7 @@ export function PhoneCalendar({ spaces }: { spaces: Space[] }) {
             const open = list.filter((t) => !isClosed(t.status));
             const isSel = iso === selected;
             const isToday = iso === today;
-            const overdue = iso < today && open.length > 0;
+            const overdue = iso < today && open.some((t) => !t.is_event);
             return (
               <button
                 key={iso}
@@ -138,7 +138,11 @@ export function PhoneCalendar({ spaces }: { spaces: Space[] }) {
                     <span
                       key={t.id}
                       className={cn("h-1.5 w-1.5 rounded-full", isClosed(t.status) && "opacity-35")}
-                      style={{ backgroundColor: overdue ? "#dc2626" : dotColor(t) }}
+                      style={
+                        t.is_event
+                          ? { boxShadow: `inset 0 0 0 1.5px ${dotColor(t)}` } // an event: a hollow ring
+                          : { backgroundColor: overdue ? "#dc2626" : dotColor(t) }
+                      }
                     />
                   ))}
                   {list.length > 4 && <span className="text-[9px] font-bold leading-none text-muted">+</span>}

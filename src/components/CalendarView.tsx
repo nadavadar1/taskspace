@@ -12,7 +12,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Bell, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useData } from "./DataProvider";
 import { cn, StatusIcon, useIsPhone } from "./ui";
 import { PhoneCalendar } from "./PhoneCalendar";
@@ -60,7 +60,11 @@ function Chip({
       }}
       title={notDone && task.status_note ? `${task.title} — לא בוצעה: ${task.status_note}` : task.title}
     >
-      <StatusIcon status={task.status} size={11} />
+      {task.is_event ? (
+        <CalendarDays size={11} className="shrink-0" aria-label="אירוע ביומן" />
+      ) : (
+        <StatusIcon status={task.status} size={11} />
+      )}
       {task.due_time && <span className="shrink-0 font-semibold opacity-80">{task.due_time}</span>}
       <span className={cn("truncate", done && "line-through")}>{task.title}</span>
       {hasReminder && <Bell size={11} className="shrink-0 text-amber-600" aria-label="יש תזכורת" />}

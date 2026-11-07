@@ -28,7 +28,6 @@ import { NotificationsButton } from "./NotificationsButton";
 import { CommandPalette } from "./CommandPalette";
 import { QuickAdd } from "./QuickAdd";
 import { TaskActionsSheet } from "./TaskActions";
-import { isClosed } from "@/lib/constants";
 
 const MAIN_LINKS = [
   { href: "/", label: "דשבורד", icon: LayoutDashboard },
@@ -75,6 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setQuickAddOpen,
     chatOpen,
     setChatOpen,
+    isTodo,
   } = useData();
   const pathname = usePathname();
   const router = useRouter();
@@ -240,7 +240,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sheet open={spacesOpen} onClose={() => setSpacesOpen(false)} title="המרחבים שלי">
         <div className="space-y-1">
           {spaces.map((s) => {
-            const open = tasks.filter((t) => t.space_id === s.id && !isClosed(t.status));
+            const open = tasks.filter((t) => t.space_id === s.id && isTodo(t));
             const late = open.filter((t) => t.due_date && t.due_date < today).length;
             const active = currentSpace?.id === s.id;
             return (

@@ -1,6 +1,7 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
 import { useData } from "./DataProvider";
 import { cn } from "./ui";
 import { addDays, relativeLabel, startOfWeek } from "@/lib/dates";
@@ -69,5 +70,31 @@ export function HabitDots({ task }: { task: Task }) {
         />
       ))}
     </span>
+  );
+}
+
+/**
+ * Repeating tasks already done for this round, folded away under one green line
+ * so they don't look like open work ("✓ 2 בוצעו לתקופה הזו").
+ */
+export function CoveredGroup({ tasks, render }: { tasks: Task[]; render: (t: Task) => React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (!tasks.length) return null;
+  return (
+    <div className="mx-1.5 mb-1 mt-1 rounded-xl bg-emerald-50/70">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-start text-xs font-bold text-emerald-700"
+        aria-expanded={open}
+      >
+        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
+          <Check size={11} strokeWidth={3} />
+        </span>
+        {tasks.length === 1 ? "משימה חוזרת אחת כבר בוצעה לתקופה הזו" : `${tasks.length} משימות חוזרות כבר בוצעו לתקופה הזו`}
+        <ChevronDown size={14} className={cn("ms-auto transition", !open && "-rotate-90")} />
+      </button>
+      {open && <div className="anim-fade pb-1">{tasks.map(render)}</div>}
+    </div>
   );
 }

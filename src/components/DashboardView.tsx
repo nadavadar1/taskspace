@@ -12,7 +12,9 @@ import { ChecklistProgressBar } from "./Checklist";
 import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
 import { completionStreak, focusQueue } from "@/lib/focus";
 import { GestureTip } from "./GestureTip";
-import { PRIORITIES, PRIORITY_MAP, isClosed } from "@/lib/constants";
+import { UpcomingEvents } from "./Events";
+import { CoveredGroup } from "./Recurring";
+import { PRIORITIES, PRIORITY_MAP } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Priority, Space, Task } from "@/lib/types";
 
@@ -63,7 +65,17 @@ export function DashboardView() {
   const spaceById = useMemo(() => new Map(spaces.map((s) => [s.id, s])), [spaces]);
 
   const scoped = useMemo(() => tasks.filter((t) => selected.includes(t.space_id)), [tasks, selected]);
-  const open = useMemo(() => scoped.filter((t) => !isClosed(t.status)), [scoped]);
+  const { series, isTodo } = useData();
+  // what is still to do: no calendar events, no repeating task that was already done for this round
+  const open = useMemo(() => scoped.filter((t) => isTodo(t)), [scoped, isTodo]);
+  const coveredAll = useMemo(() => scoped.filter((t) => series.get(t.id)?.covered), [scoped, series]);
+  const upcomingEvents = useMemo(
+    () =>
+      scoped
+        .filter((t) => t.is_event && t.due_date && t.due_date >= today)
+        .sort((a, b) => `${a.due_date} ${a.due_time ?? ""}`.localeCompare(`${b.due_date} ${b.due_time ?? ""}`)),
+    [scoped, today],
+  );
 
   const attention = useMemo(() => {
     const overdue = open.filter((t) => t.due_date && t.due_date < today).sort(byImportance);
@@ -77,9 +89,7 @@ export function DashboardView() {
   const doneThisWeek = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
-  const { series } = useData();
   const nextUp = useMemo(() => focusQueue(open, today, series)[0], [open, today, series]);
-  const coveredLast = (a: Task, b: Task) => Number(!!series.get(a.id)?.covered) - Number(!!series.get(b.id)?.covered);
   const closedToday = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
   ).length;
@@ -216,6 +226,8 @@ export function DashboardView() {
 
           <GestureTip />
 
+          <UpcomingEvents events={upcomingEvents} spaceById={spaceById} />
+
           {/* numbers */}
           <div className="mb-6 hidden grid-cols-2 gap-3 sm:grid sm:grid-cols-4">
             <Stat value={open.length} label="משימות פתוחות" />
@@ -292,8 +304,16 @@ export function DashboardView() {
             ) : (
               <div className="grid items-start gap-4 lg:grid-cols-2">
                 {PRIORITIES.map((p) => (
-                  <PriorityPanel key={p.key} priority={p.key} tasks={[...byPriority[p.key]].sort((a, b) => coveredLast(a, b) || byDue(a, b))} spaceById={spaceById} />
+                  <PriorityPanel key={p.key} priority={p.key} tasks={[...byPriority[p.key]].sort(byDue)} spaceById={spaceById} />
                 ))}
+                {coveredAll.length > 0 && (
+                  <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-surface py-1 shadow-soft">
+                    <CoveredGroup
+                      tasks={coveredAll}
+                      render={(t) => <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace />}
+                    />
+                  </section>
+                )}
               </div>
             )}
           </section>
@@ -519,11 +539,10 @@ function PanelShell({
 }
 
 function SpacePanel({ space, tasks }: { space: Space; tasks: Task[] }) {
-  const { today, series } = useData();
-  // repeating tasks already done for this round go to the bottom (they show a green "בוצע" pill)
-  const open = tasks
-    .filter((t) => !isClosed(t.status))
-    .sort((a, b) => Number(!!series.get(a.id)?.covered) - Number(!!series.get(b.id)?.covered) || byImportance(a, b));
+  const { today, series, isTodo } = useData();
+  const open = tasks.filter((t) => isTodo(t)).sort(byImportance);
+  // repeating tasks already done for this round are folded away under one green line
+  const covered = tasks.filter((t) => series.get(t.id)?.covered).sort(byDue);
   const overdue = open.filter((t) => t.due_date && t.due_date < today).length;
   const done = tasks.filter((t) => t.status === "done").length;
   const notDone = tasks.filter((t) => t.status === "not_done").length;
@@ -557,6 +576,7 @@ function SpacePanel({ space, tasks }: { space: Space; tasks: Task[] }) {
       ) : (
         open.map((t) => <TaskRow key={t.id} task={t} showPriority />)
       )}
+      <CoveredGroup tasks={covered} render={(t) => <TaskRow key={t.id} task={t} />} />
     </PanelShell>
   );
 }

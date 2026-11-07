@@ -99,7 +99,7 @@ const STATUS_ORDER = STATUSES.map((s) => s.key);
 function PhoneKanban({ space }: { space: Space }) {
   const { tasks, patchTask } = useData();
   const [tab, setTab] = useLocalChoice<Status>(`kanban-tab-${space.id}`, "new", STATUS_ORDER);
-  const spaceTasks = tasks.filter((t) => t.space_id === space.id);
+  const spaceTasks = tasks.filter((t) => t.space_id === space.id && !t.is_event);
   const counts = Object.fromEntries(STATUSES.map((s) => [s.key, spaceTasks.filter((t) => t.status === s.key).length]));
   const list = spaceTasks
     .filter((t) => t.status === tab)
@@ -171,7 +171,7 @@ function BoardKanban({ space }: { space: Space }) {
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
   );
 
-  const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id), [tasks, space.id]);
+  const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id && !t.is_event), [tasks, space.id]);
   const columns = useMemo(() => {
     const by: Record<Status, Task[]> = { new: [], in_progress: [], on_hold: [], done: [], not_done: [] };
     for (const t of spaceTasks) by[t.status].push(t);

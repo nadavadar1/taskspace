@@ -38,6 +38,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
     saveTaskReminder,
     removeTaskReminder,
     toast,
+    series,
   } = useData();
   const editing = taskDialog?.mode === "edit" ? tasks.find((t) => t.id === taskDialog.id) : undefined;
   const defaults = taskDialog?.mode === "new" ? taskDialog.defaults : {};
@@ -56,6 +57,9 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [checklist, setChecklist] = useState<ChecklistItem[]>(editing?.checklist ?? []);
   const [recurrence, setRecurrence] = useState<Recurrence>(editing?.recurrence ?? defaults.recurrence ?? "none");
   const [recurrenceN, setRecurrenceN] = useState<number>(editing?.recurrence_n ?? defaults.recurrence_n ?? 3);
+  // an event (exam, meeting) is a calendar entry to prepare for, not something to tick off
+  const [isEvent, setIsEvent] = useState<boolean>(editing?.is_event ?? false);
+  const coveredInfo = editing ? series.get(editing.id) : undefined;
   const [busy, setBusy] = useState(false);
 
   // reminder: first send time defaults to one hour from now (Israel time); when editing, the next scheduled time
@@ -116,11 +120,18 @@ function TaskForm({ onClose }: { onClose: () => void }) {
     const noteField = status === "not_done" ? { status_note: statusNote.trim() } : {};
     // a repeating task needs a date to count from: today when none was picked
     const dueDate = due || (recurrence !== "none" ? today : "");
-    const extra = {
-      checklist,
-      recurrence,
-      recurrence_n: recurrence === "every_n_days" ? recurrenceN : null,
-    };
+    if (isEvent && !due) {
+      toast("לאירוע צריך תאריך");
+      return;
+    }
+    const extra = isEvent
+      ? { is_event: true, checklist: [], recurrence: "none" as Recurrence, recurrence_n: null, priority: "medium" as Priority, status: "new" as Status }
+      : {
+          is_event: false,
+          checklist,
+          recurrence,
+          recurrence_n: recurrence === "every_n_days" ? recurrenceN : null,
+        };
     const withReminder = remOn && !done;
     if (withReminder) {
       if (!remDate || !remTime) {
@@ -201,7 +212,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
     <Modal
       open
       onClose={onClose}
-      title={editing ? "עריכת משימה" : "משימה חדשה"}
+      title={editing ? (isEvent ? "עריכת אירוע" : "עריכת משימה") : isEvent ? "אירוע חדש ביומן" : "משימה חדשה"}
       footer={
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -235,21 +246,53 @@ function TaskForm({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="space-y-5" ref={formRef}>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="סוג">
+          {[
+            { v: false, label: "✓ משימה", hint: "משהו לבצע ולסמן" },
+            { v: true, label: "📅 אירוע ביומן", hint: "מבחן, פגישה: רק להיערך" },
+          ].map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              role="tab"
+              aria-selected={isEvent === o.v}
+              onClick={() => setIsEvent(o.v)}
+              className={cn(
+                "rounded-lg px-2 py-2 text-sm font-bold transition",
+                isEvent === o.v ? "bg-surface text-ink shadow-soft" : "text-slate-500",
+              )}
+              title={o.hint}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+
+        {coveredInfo?.covered && !isEvent && (
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm font-bold text-emerald-700">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs text-white">✓</span>
+            כבר ביצעת את המשימה החוזרת הזו לתקופה הנוכחית. זו כבר הפעם הבאה.
+          </div>
+        )}
+
         <div>
           <input
             autoFocus={!editing}
             value={title}
             onChange={(e) => changeTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && save()}
-            placeholder="מה צריך לעשות?"
+            placeholder={isEvent ? "מה האירוע? למשל: מבחן בחשבונאות" : "מה צריך לעשות?"}
             className="w-full rounded-xl border border-line px-3.5 py-3 text-base font-medium outline-none transition focus:border-primary focus:ring-4 focus:ring-indigo-100"
           />
         </div>
 
+        {!isEvent && (
         <Field label="צעדים קטנים">
           <ChecklistEditor items={checklist} onChange={setChecklist} />
         </Field>
+        )}
 
+        {!isEvent && (
         <Field label="עדיפות">
           <div className="grid grid-cols-4 gap-2">
             {PRIORITIES.map((p) => (
@@ -269,7 +312,9 @@ function TaskForm({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </Field>
+        )}
 
+        {!isEvent && (
         <Field label="סטטוס">
           <div className="scroll-thin -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:grid sm:grid-cols-5">
             {STATUSES.map((s) => (
@@ -311,9 +356,10 @@ function TaskForm({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </Field>
+        )}
 
         <div className="grid gap-5">
-          <Field label="תאריך יעד">
+          <Field label={isEvent ? "תאריך ושעה" : "תאריך יעד"}>
             <div className="flex gap-2">
               <input
                 type="date"
@@ -356,6 +402,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
             </div>
           </Field>
 
+          {!isEvent && (
           <Field label="חוזרת">
             <div className="scroll-thin -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
               {RECURRENCE_CHOICES.map((r) => (
@@ -400,6 +447,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
               </p>
             )}
           </Field>
+          )}
 
           <Field label="מרחב">
             <div className="scroll-thin -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">

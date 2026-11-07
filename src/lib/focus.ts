@@ -1,4 +1,4 @@
-import { PRIORITY_MAP, isClosed } from "./constants";
+import { PRIORITY_MAP, isOpenTask } from "./constants";
 import { addDays, todayISO } from "./dates";
 import type { Task } from "./types";
 
@@ -23,7 +23,7 @@ export function focusQueue(tasks: Task[], today: string, covered?: Set<number> |
   const isCovered = (t: Task) =>
     !covered ? false : covered instanceof Set ? covered.has(t.id) : !!covered.get(t.id)?.covered;
   return tasks
-    .filter((t) => !isClosed(t.status))
+    .filter((t) => isOpenTask(t))
     .sort(
       (a, b) =>
         Number(isCovered(a)) - Number(isCovered(b)) ||
