@@ -15,7 +15,7 @@ import {
   utcToZoned,
   zonedToUtcISO,
 } from "./dates";
-import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP, isClosed } from "./constants";
+import { PRIORITY_KEYS, PRIORITY_MAP, STATUS_KEYS, STATUS_MAP, isClosed, isOpenTask } from "./constants";
 import { createTask, deleteTasks, getStudyCourses, getTask, listSpaces, listTasks, updateTask } from "./store";
 import { recurrenceLabel } from "./recurrence";
 import { createReminder, deleteReminders, listReminders, listRemindersByIds } from "./reminders";
@@ -88,6 +88,7 @@ ${coursesBlock}
 - כשהמשתמש שואל מה חשוב, במה להתחיל או מבקש תכנון/סיכום – הצע צעד אחד קונקרטי להתחיל ממנו עכשיו, בניסוח של פעולה ("לפתוח את המצגת ולכתוב שקף ראשון"). אחרי פעולות פשוטות (הוספה, עדכון, מחיקה) אל תוסיף הצעת צעד, רק דווח מה בוצע.
 - חגוג השלמות בקצרה. אל תאשים ואל תלחץ על איחורים – הצע לתזמן מחדש.
 - כשמשימה גדולה או מעורפלת: הצע לפרק אותה ל-3 עד 5 צעדים קטנים (עד 10 דקות כל אחד), ואם המשתמש מבקש – שמור אותם כצעדים בתוך המשימה (checklist ב-update_tasks, או ב-add_tasks למשימה חדשה), בניסוח שמתחיל בפועל.
+- מבחן, פגישה או טיסה בתאריך = אירוע ביומן (is_event: true), לא משימה. אירוע לא "מבצעים" ולא מסמנים כהושלם; הוא רק מופיע ביומן כדי להיערך אליו.
 - משימה שחוזרת על עצמה ("כל כמה ימים", "כל שבוע", "כל יום ראשון") – משימה אחת עם recurrence, לא כמה עותקים. כשמסמנים אותה כהושלמה, המערכת יוצרת לבד את הבאה.
 - לשאלות כמו "מה לעשות עכשיו" או "במה להתחיל" – השתמש ב-daily_briefing והמלץ על משימה אחת ראשונה, ואחריה עוד עד שתיים.`;
 }
@@ -143,6 +144,11 @@ const TOOLS = [
                 status: { type: "string", enum: STATUS_KEYS },
                 due_date: { type: "string", description: "YYYY-MM-DD" },
                 due_time: { type: "string", description: "HH:MM, Israel time. Only meaningful together with due_date." },
+                is_event: {
+                  type: "boolean",
+                  description:
+                    "true for a calendar event to know about and prepare for (an exam, a meeting, a flight), not something to tick off. Events show in the calendar, not in the to-do lists.",
+                },
                 recurrence: {
                   type: "string",
                   enum: ["none", "daily", "weekly", "monthly", "every_n_days"],
@@ -407,8 +413,9 @@ function compact(t: Task, ctx: Ctx) {
     status: STATUS_MAP[t.status].label,
     due_date: t.due_date,
     due_time: t.due_time,
-    overdue: !!t.due_date && t.due_date < ctx.today && !isClosed(t.status),
+    overdue: !!t.due_date && t.due_date < ctx.today && isOpenTask(t),
     ...(t.status === "not_done" ? { not_done_reason: t.status_note } : {}),
+    ...(t.is_event ? { event: true } : {}),
     ...(t.recurrence !== "none" ? { repeats: recurrenceLabel(t.recurrence, t.recurrence_n) } : {}),
     ...(t.checklist.length
       ? { steps: `${t.checklist.filter((i) => i.done).length}/${t.checklist.length}: ${t.checklist.map((i) => (i.done ? "✓" : "○") + i.text).join("; ")}` }
@@ -462,7 +469,11 @@ async function resolveTargets(
     if (!found.length) return { error: "None of the given task_ids exist inside the current selection." };
     return { tasks: found };
   }
-  if (args.filter && typeof args.filter === "object") return applyFilter(all, args.filter as Filter, ctx);
+  if (args.filter && typeof args.filter === "object") {
+    // bulk changes by filter never touch calendar events (exams, meetings); those are changed by id only
+    const r = applyFilter(all, args.filter as Filter, ctx);
+    return r.tasks ? { tasks: r.tasks.filter((t) => !t.is_event) } : r;
+  }
   return { error: "Provide task_ids or a filter (use {} for all open tasks in the selection)." };
 }
 
@@ -579,6 +590,7 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
           recurrence: typeof item.recurrence === "string" ? item.recurrence : undefined,
           recurrence_n: typeof item.recurrence_n === "number" ? item.recurrence_n : null,
           checklist: Array.isArray(item.checklist) ? item.checklist : undefined,
+          is_event: item.is_event === true,
         });
         created.push(compact(t, ctx));
         const minutesBefore = Number(item.reminder_minutes_before);
@@ -740,7 +752,7 @@ async function execute(name: string, args: Record<string, unknown>, ctx: Ctx, ou
 }
 
 function summarize(tasks: Task[], spaces: Space[], ctx: Ctx) {
-  const open = tasks.filter((t) => !isClosed(t.status));
+  const open = tasks.filter((t) => isOpenTask(t));
   const weekStart = startOfWeek(ctx.today);
   const doneThisWeek = tasks.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
@@ -763,7 +775,7 @@ function summarize(tasks: Task[], spaces: Space[], ctx: Ctx) {
     by_priority: count(open, (t) => PRIORITY_MAP[t.priority].label),
     by_space: spaces.map((s) => {
       const st = tasks.filter((t) => t.space_id === s.id);
-      const so = st.filter((t) => !isClosed(t.status));
+      const so = st.filter((t) => isOpenTask(t));
       return {
         space: s.name,
         open: so.length,
@@ -777,7 +789,12 @@ function summarize(tasks: Task[], spaces: Space[], ctx: Ctx) {
 }
 
 function briefing(tasks: Task[], ctx: Ctx) {
-  const open = tasks.filter((t) => !isClosed(t.status));
+  const open = tasks.filter((t) => isOpenTask(t));
+  const upcomingEvents = tasks
+    .filter((t) => t.is_event && t.due_date && t.due_date >= ctx.today && t.due_date <= addDays(ctx.today, 21))
+    .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
+    .slice(0, 3)
+    .map((t) => compact(t, ctx));
   const ranked = sortTasks(open, ctx);
   const weekStart = startOfWeek(ctx.today);
   const reason = (t: Task): string => {
@@ -818,6 +835,7 @@ function briefing(tasks: Task[], ctx: Ctx) {
       .slice(0, 3)
       .map((t) => compact(t, ctx)),
     celebrate: doneToday.slice(0, 3).map((t) => t.title),
+    upcoming_events: upcomingEvents,
   };
 }
 

@@ -140,6 +140,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* iPhone draws a grey box over whatever is tapped; the app shows its own pressed state instead */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 button,
 input,
 textarea,
@@ -280,7 +285,10 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .confetti-bit,
+  /* no flying confetti at all (a still one would just be a stray square) */
+  .confetti-bit {
+    display: none;
+  }
   .anim-pulse-ring,
   .anim-pop,
   .anim-slide,

@@ -18,6 +18,7 @@ export const PATCH = guarded<Ctx>(async (req, ctx) => {
   if (typeof body.space_id === "number") patch.space_id = body.space_id;
   if (typeof body.position === "number") patch.position = body.position;
   if (Array.isArray(body.checklist)) patch.checklist = body.checklist;
+  if (typeof body.is_event === "boolean") patch.is_event = body.is_event;
   if (typeof body.recurrence === "string") patch.recurrence = body.recurrence;
   if (body.recurrence_n === null || typeof body.recurrence_n === "number") patch.recurrence_n = body.recurrence_n;
   const { task, spawned } = await updateTaskFull(id, patch);

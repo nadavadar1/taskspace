@@ -7,7 +7,7 @@ import type { ChecklistItem, Priority, Recurrence, Settings, Space, Status, Task
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
   to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
-  status_note, checklist, recurrence, recurrence_n, position, created_at, completed_at`;
+  status_note, checklist, recurrence, recurrence_n, is_event, position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -23,6 +23,7 @@ function mapTask(r: Record<string, unknown>): Task {
     checklist: sanitizeChecklist(r.checklist),
     recurrence: isRecurrence(r.recurrence) ? r.recurrence : "none",
     recurrence_n: r.recurrence_n == null ? null : Number(r.recurrence_n),
+    is_event: r.is_event === true,
     position: Number(r.position),
     created_at: new Date(r.created_at as string).toISOString(),
     completed_at: r.completed_at ? new Date(r.completed_at as string).toISOString() : null,
@@ -118,6 +119,7 @@ export interface TaskInput {
   checklist?: unknown;
   recurrence?: string;
   recurrence_n?: number | null;
+  is_event?: boolean;
   position?: number;
 }
 
@@ -150,8 +152,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
   }
   const rows = await db.unsafe(
     `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note,
-                           checklist, recurrence, recurrence_n, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12, ${status === "done" ? "now()" : "null"})
+                           checklist, recurrence, recurrence_n, is_event, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
     [
       input.space_id,
@@ -166,6 +168,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
       JSON.stringify(checklist),
       rec.recurrence,
       rec.recurrence_n,
+      input.is_event === true,
     ] as never[],
   );
   return mapTask(rows[0]);
@@ -183,6 +186,7 @@ export interface TaskPatch {
   checklist?: unknown;
   recurrence?: string;
   recurrence_n?: number | null;
+  is_event?: boolean;
   position?: number;
 }
 
@@ -262,6 +266,7 @@ export async function updateTaskFull(id: number, patch: TaskPatch): Promise<{ ta
     vals.push(JSON.stringify(sanitizeChecklist(patch.checklist)));
     sets.push(`checklist = $${vals.length}::jsonb`);
   }
+  if (typeof patch.is_event === "boolean") push("is_event", patch.is_event);
   if (isRecurrence(patch.recurrence)) {
     const rec = cleanRecurrence(patch.recurrence, patch.recurrence_n);
     push("recurrence", rec.recurrence);
@@ -302,6 +307,7 @@ async function spawnNext(done: Task, reminder: ReminderSnapshot | null): Promise
     checklist: done.checklist.map((i: ChecklistItem) => ({ ...i, done: false })),
     recurrence: done.recurrence,
     recurrence_n: done.recurrence_n,
+    is_event: done.is_event,
   });
   if (reminder) {
     // same time of day, and the same number of days before the due date as before

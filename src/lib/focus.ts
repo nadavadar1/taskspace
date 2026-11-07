@@ -1,4 +1,4 @@
-import { PRIORITY_MAP, isClosed } from "./constants";
+import { PRIORITY_MAP, isOpenTask } from "./constants";
 import { addDays, todayISO } from "./dates";
 import type { Task } from "./types";
 
@@ -18,11 +18,15 @@ function bucket(t: Task, today: string): number {
  * The order in which to work: overdue, then today, then urgent, then what is already started, then the rest;
  * inside each group the most important and nearest first. Paused tasks come last.
  */
-export function focusQueue(tasks: Task[], today: string): Task[] {
+export function focusQueue(tasks: Task[], today: string, covered?: Set<number> | Map<number, { covered: boolean }>): Task[] {
+  // a repeating task already done for this round is not "next" (it waits for its next date)
+  const isCovered = (t: Task) =>
+    !covered ? false : covered instanceof Set ? covered.has(t.id) : !!covered.get(t.id)?.covered;
   return tasks
-    .filter((t) => !isClosed(t.status))
+    .filter((t) => isOpenTask(t))
     .sort(
       (a, b) =>
+        Number(isCovered(a)) - Number(isCovered(b)) ||
         Number(a.status === "on_hold") - Number(b.status === "on_hold") ||
         bucket(a, today) - bucket(b, today) ||
         rank(a) - rank(b) ||

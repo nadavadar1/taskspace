@@ -72,7 +72,8 @@ export function FocusView() {
 function FocusInner() {
   const { tasks, spaces, today, patchTask, openTask } = useData();
   const params = useSearchParams();
-  const queue = useMemo(() => focusQueue(tasks, today), [tasks, today]);
+  const { series } = useData();
+  const queue = useMemo(() => focusQueue(tasks, today, series), [tasks, today, series]);
   const [timer, setTimerState] = useState<TimerState>(loadTimer);
   const [skipped, setSkipped] = useState<number[]>([]);
   const [picked, setPicked] = useState<number | null>(() => {

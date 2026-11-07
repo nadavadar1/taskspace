@@ -9,7 +9,7 @@ import { cn, PriorityBadge, StatusIcon } from "./ui";
 
 export function DueLabel({ task, today, className }: { task: Task; today: string; className?: string }) {
   if (!task.due_date) return null;
-  const overdue = !isClosed(task.status) && task.due_date < today;
+  const overdue = !isClosed(task.status) && !task.is_event && task.due_date < today;
   const isToday = task.due_date === today;
   return (
     <span

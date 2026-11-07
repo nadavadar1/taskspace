@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ChecklistItem, Priority, Recurrence, Reminder, RepeatKind, Settings, Space, Status, Task, ViewType } from "@/lib/types";
 import { relativeLabel, todayISO } from "@/lib/dates";
-import { isClosed } from "@/lib/constants";
+import { isClosed, isOpenTask } from "@/lib/constants";
+import { buildSeries, type SeriesInfo } from "@/lib/recurrence";
 
 export interface NewTaskDefaults {
   space_id?: number;
@@ -40,6 +41,10 @@ interface DataCtx {
   reminders: Reminder[];
   settings: Settings;
   today: string;
+  /** Open repeating tasks: when the task was last done, and whether the current round is already done. */
+  series: Map<number, SeriesInfo>;
+  /** Still to do: open, not a calendar event, and not a repeating task already done for this round. */
+  isTodo: (t: Task) => boolean;
   refresh: () => Promise<void>;
   saveTaskReminder: (taskId: number, input: TaskReminderInput) => Promise<boolean>;
   removeTaskReminder: (taskId: number) => Promise<void>;
@@ -409,10 +414,15 @@ export function DataProvider({
     setChatPrefill({ text, send, nonce: Date.now() });
   }, []);
 
+  const series = useMemo(() => buildSeries(tasks, today), [tasks, today]);
+  const isTodo = useCallback((t: Task) => isOpenTask(t) && !series.get(t.id)?.covered, [series]);
+
   const value = useMemo<DataCtx>(
     () => ({
       spaces,
       tasks,
+      series,
+      isTodo,
       reminders,
       settings,
       today,
@@ -454,6 +464,8 @@ export function DataProvider({
     [
       spaces,
       tasks,
+      series,
+      isTodo,
       reminders,
       settings,
       today,

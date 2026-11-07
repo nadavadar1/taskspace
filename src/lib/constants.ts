@@ -20,6 +20,11 @@ export function isClosed(status: Status): boolean {
   return status === "done" || status === "not_done";
 }
 
+/** Something still to do: not closed, and not a calendar event (events are only shown in the calendar and "upcoming"). */
+export function isOpenTask(t: { status: Status; is_event?: boolean }): boolean {
+  return !isClosed(t.status) && !t.is_event;
+}
+
 export const VIEWS: { key: ViewType; label: string; description: string }[] = [
   { key: "kanban", label: "קנבן", description: "עמודות לפי סטטוס, גוררים משימות ביניהן" },
   { key: "todo", label: "רשימת TODO", description: "רשימה עם וי, ממוינת לפי עדיפות" },

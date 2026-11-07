@@ -252,6 +252,18 @@ export function Celebration({ nonce }: { nonce: number }) {
 }
 
 function Burst({ seed }: { seed: number }) {
+  // the burst removes itself when it is over: nothing may stay on screen
+  // (with "Reduce Motion" on, iPhone doesn't animate it, and the bits used to stay put as a small square)
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setOver(true), 1300);
+    return () => clearTimeout(t);
+  }, []);
+  if (over) return null;
+  return <BurstBits seed={seed} />;
+}
+
+function BurstBits({ seed }: { seed: number }) {
   // deterministic per burst (no Math.random in render)
   const bits = Array.from({ length: 22 }, (_, i) => {
     const a = ((i * 137.5 + seed * 47) % 360) * (Math.PI / 180);
