@@ -77,7 +77,9 @@ export function DashboardView() {
   const doneThisWeek = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
-  const nextUp = useMemo(() => focusQueue(open, today)[0], [open, today]);
+  const { series } = useData();
+  const nextUp = useMemo(() => focusQueue(open, today, series)[0], [open, today, series]);
+  const coveredLast = (a: Task, b: Task) => Number(!!series.get(a.id)?.covered) - Number(!!series.get(b.id)?.covered);
   const closedToday = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
   ).length;
@@ -290,7 +292,7 @@ export function DashboardView() {
             ) : (
               <div className="grid items-start gap-4 lg:grid-cols-2">
                 {PRIORITIES.map((p) => (
-                  <PriorityPanel key={p.key} priority={p.key} tasks={[...byPriority[p.key]].sort(byDue)} spaceById={spaceById} />
+                  <PriorityPanel key={p.key} priority={p.key} tasks={[...byPriority[p.key]].sort((a, b) => coveredLast(a, b) || byDue(a, b))} spaceById={spaceById} />
                 ))}
               </div>
             )}
@@ -517,8 +519,11 @@ function PanelShell({
 }
 
 function SpacePanel({ space, tasks }: { space: Space; tasks: Task[] }) {
-  const { today } = useData();
-  const open = tasks.filter((t) => !isClosed(t.status)).sort(byImportance);
+  const { today, series } = useData();
+  // repeating tasks already done for this round go to the bottom (they show a green "בוצע" pill)
+  const open = tasks
+    .filter((t) => !isClosed(t.status))
+    .sort((a, b) => Number(!!series.get(a.id)?.covered) - Number(!!series.get(b.id)?.covered) || byImportance(a, b));
   const overdue = open.filter((t) => t.due_date && t.due_date < today).length;
   const done = tasks.filter((t) => t.status === "done").length;
   const notDone = tasks.filter((t) => t.status === "not_done").length;
