@@ -7,7 +7,7 @@ import type { ChecklistItem, Priority, Recurrence, Settings, Space, Status, Task
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
   to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
-  status_note, checklist, recurrence, recurrence_n, position, created_at, completed_at`;
+  status_note, checklist, recurrence, recurrence_n, is_event, position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -23,6 +23,7 @@ function mapTask(r: Record<string, unknown>): Task {
     checklist: sanitizeChecklist(r.checklist),
     recurrence: isRecurrence(r.recurrence) ? r.recurrence : "none",
     recurrence_n: r.recurrence_n == null ? null : Number(r.recurrence_n),
+    is_event: r.is_event === true,
     position: Number(r.position),
     created_at: new Date(r.created_at as string).toISOString(),
     completed_at: r.completed_at ? new Date(r.completed_at as string).toISOString() : null,
@@ -118,6 +119,7 @@ export interface TaskInput {
   checklist?: unknown;
   recurrence?: string;
   recurrence_n?: number | null;
+  is_event?: boolean;
   position?: number;
 }
 
@@ -150,8 +152,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
   }
   const rows = await db.unsafe(
     `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note,
-                           checklist, recurrence, recurrence_n, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12, ${status === "done" ? "now()" : "null"})
+                           checklist, recurrence, recurrence_n, is_event, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
     [
       input.space_id,
@@ -166,6 +168,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
       JSON.stringify(checklist),
       rec.recurrence,
       rec.recurrence_n,
+      input.is_event === true,
     ] as never[],
   );
   return mapTask(rows[0]);
@@ -183,6 +186,7 @@ export interface TaskPatch {
   checklist?: unknown;
   recurrence?: string;
   recurrence_n?: number | null;
+  is_event?: boolean;
   position?: number;
 }
 
@@ -262,6 +266,7 @@ export async function updateTaskFull(id: number, patch: TaskPatch): Promise<{ ta
     vals.push(JSON.stringify(sanitizeChecklist(patch.checklist)));
     sets.push(`checklist = $${vals.length}::jsonb`);
   }
+  if (typeof patch.is_event === "boolean") push("is_event", patch.is_event);
   if (isRecurrence(patch.recurrence)) {
     const rec = cleanRecurrence(patch.recurrence, patch.recurrence_n);
     push("recurrence", rec.recurrence);
@@ -302,6 +307,7 @@ async function spawnNext(done: Task, reminder: ReminderSnapshot | null): Promise
     checklist: done.checklist.map((i: ChecklistItem) => ({ ...i, done: false })),
     recurrence: done.recurrence,
     recurrence_n: done.recurrence_n,
+    is_event: done.is_event,
   });
   if (reminder) {
     // same time of day, and the same number of days before the due date as before
@@ -336,16 +342,37 @@ export async function deleteTasks(ids: number[]): Promise<number> {
 
 export async function getSettings(): Promise<Settings> {
   await ensureSchema();
-  const rows = await sql()`select value from ts_settings where key = 'dashboard_spaces'`;
-  let v = rows[0]?.value;
-  if (typeof v === "string") {
-    try {
-      v = JSON.parse(v);
-    } catch {
-      v = null;
+  const rows = await sql()`select key, value from ts_settings where key in ('dashboard_spaces', 'day_note')`;
+  const read = (key: string): unknown => {
+    let v = rows.find((r) => r.key === key)?.value;
+    if (typeof v === "string") {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        v = null;
+      }
     }
+    return v;
+  };
+  const v = read("dashboard_spaces");
+  const n = read("day_note") as { date?: unknown; text?: unknown } | null;
+  return {
+    dashboard_spaces: Array.isArray(v) ? (v as number[]) : null,
+    day_note: n && isISO(n.date) && typeof n.text === "string" ? { date: n.date, text: n.text } : null,
+  };
+}
+
+export async function setDayNote(note: { date: string; text: string } | null): Promise<void> {
+  await ensureSchema();
+  const db = sql();
+  if (!note || !note.text.trim()) {
+    await db`delete from ts_settings where key = 'day_note'`;
+    return;
   }
-  return { dashboard_spaces: Array.isArray(v) ? (v as number[]) : null };
+  const clean = { date: note.date, text: note.text.trim().slice(0, 400) };
+  await db`
+    insert into ts_settings (key, value) values ('day_note', ${db.json(clean)})
+    on conflict (key) do update set value = excluded.value`;
 }
 
 /**
@@ -377,4 +404,37 @@ export async function setDashboardSpaces(ids: number[] | null): Promise<void> {
   await db`
     insert into ts_settings (key, value) values ('dashboard_spaces', ${db.json(clean)})
     on conflict (key) do update set value = excluded.value`;
+}
+
+/* ----------------------------- timed-task nudges ----------------------------- */
+
+/**
+ * Open tasks for today whose time comes within the next `ahead` minutes (or passed in the last two),
+ * claimed atomically so each is pushed once. Tasks that have their own reminder are left to it.
+ */
+export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "title" | "description" | "space_id" | "due_time">[]> {
+  await ensureSchema();
+  const now = utcToZoned(new Date().toISOString());
+  const at = (min: number) => {
+    const [h, m] = now.time.split(":").map(Number);
+    const t = Math.min(Math.max(h * 60 + m + min, 0), 23 * 60 + 59);
+    return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  };
+  const rows = await sql().unsafe(
+    `update ts_tasks t set nudged_for = $1::text || ' ' || to_char(t.due_time, 'HH24:MI')
+     where t.due_date = $4::date and t.due_time is not null
+       and t.due_time between $2::time and $3::time
+       and t.status not in ('done', 'not_done') and not t.is_event
+       and t.nudged_for is distinct from ($1::text || ' ' || to_char(t.due_time, 'HH24:MI'))
+       and not exists (select 1 from ts_reminders r where r.task_id = t.id and r.enabled)
+     returning t.id, t.title, t.description, t.space_id, to_char(t.due_time, 'HH24:MI') as due_time`,
+    [now.date, at(-2), at(ahead), now.date],
+  );
+  return rows.map((r) => ({
+    id: r.id as number,
+    title: r.title as string,
+    description: (r.description as string) ?? "",
+    space_id: r.space_id as number,
+    due_time: r.due_time as string,
+  }));
 }

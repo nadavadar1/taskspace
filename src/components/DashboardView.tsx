@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { AlertTriangle, CalendarClock, CalendarDays, Check, Flag, Layers, Play, Plus, Sparkles, Target, Zap } from "lucide-react";
+import { CalendarDays, Check, Flag, Layers, Play, Plus, Sparkles, Target } from "lucide-react";
 import { useData } from "./DataProvider";
 import { CalendarView } from "./CalendarView";
 import { TaskRow } from "./TaskRow";
@@ -12,7 +12,11 @@ import { ChecklistProgressBar } from "./Checklist";
 import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
 import { completionStreak, focusQueue } from "@/lib/focus";
 import { GestureTip } from "./GestureTip";
-import { PRIORITIES, PRIORITY_MAP, isClosed } from "@/lib/constants";
+import { UpcomingEvents } from "./Events";
+import { CoveredGroup } from "./Recurring";
+import { TodayPlan, useNowHM } from "./TodayPlan";
+import { planDay } from "@/lib/day-plan";
+import { PRIORITIES, PRIORITY_MAP } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Priority, Space, Task } from "@/lib/types";
 
@@ -39,7 +43,7 @@ const byImportance = (a: Task, b: Task) => rank(a) - rank(b) || dueKey(a).locale
 const byDue = (a: Task, b: Task) => dueKey(a).localeCompare(dueKey(b)) || rank(a) - rank(b) || a.id - b.id;
 
 export function DashboardView() {
-  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent, patchTask, openTask, toast } =
+  const { spaces, tasks, settings, setDashboardSpaces, today, openNewTask, openSpaceDialog, askAgent, patchTask, openTask } =
     useData();
   const [grouping, setGrouping] = useLocalChoice<Grouping>("dashboard-grouping", "space", GROUPINGS);
   // on a phone the dashboard is split into tabs, so it is short instead of five screens long
@@ -63,40 +67,39 @@ export function DashboardView() {
   const spaceById = useMemo(() => new Map(spaces.map((s) => [s.id, s])), [spaces]);
 
   const scoped = useMemo(() => tasks.filter((t) => selected.includes(t.space_id)), [tasks, selected]);
-  const open = useMemo(() => scoped.filter((t) => !isClosed(t.status)), [scoped]);
+  const { series, isTodo } = useData();
+  // what is still to do: no calendar events, no repeating task that was already done for this round
+  const open = useMemo(() => scoped.filter((t) => isTodo(t)), [scoped, isTodo]);
+  const coveredAll = useMemo(() => scoped.filter((t) => series.get(t.id)?.covered), [scoped, series]);
+  const upcomingEvents = useMemo(
+    () =>
+      scoped
+        .filter((t) => t.is_event && t.due_date && t.due_date >= today)
+        .sort((a, b) => `${a.due_date} ${a.due_time ?? ""}`.localeCompare(`${b.due_date} ${b.due_time ?? ""}`)),
+    [scoped, today],
+  );
 
-  const attention = useMemo(() => {
-    const overdue = open.filter((t) => t.due_date && t.due_date < today).sort(byImportance);
-    const todayList = open.filter((t) => t.due_date === today).sort(byImportance);
-    const seen = new Set([...overdue, ...todayList].map((t) => t.id));
-    const urgent = open.filter((t) => t.priority === "urgent" && !seen.has(t.id)).sort(byDue);
-    return { overdue, today: todayList, urgent };
-  }, [open, today]);
+  const nowHM = useNowHM();
+  const plan = useMemo(() => {
+    const doneToday = scoped.filter(
+      (t) => !t.is_event && t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
+    );
+    return planDay(open, doneToday, today, nowHM);
+  }, [open, scoped, today, nowHM]);
+  const todayLeft = open.filter((t) => t.due_date === today).length;
 
   const weekStart = startOfWeek(today);
   const doneThisWeek = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
-  const nextUp = useMemo(() => focusQueue(open, today)[0], [open, today]);
+  // "now" follows the day's clock; with nothing for today, the usual focus order
+  const nextUp = useMemo(() => plan.now ?? focusQueue(open, today, series)[0], [plan.now, open, today, series]);
   const closedToday = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
   ).length;
   const leftToday = open.filter((t) => t.due_date && t.due_date <= today).length;
   const streak = useMemo(() => completionStreak(tasks, today), [tasks, today]);
 
-  /** Overdue isn't a failure: one tap moves all of it to today (and "ביטול" puts the old dates back). */
-  function overdueToToday() {
-    const moved = attention.overdue.map((t) => ({ id: t.id, was: t.due_date }));
-    for (const m of moved) void patchTask(m.id, { due_date: today });
-    toast(moved.length === 1 ? "משימה אחת הועברה להיום" : `${moved.length} משימות הועברו להיום`, {
-      action: {
-        label: "ביטול",
-        run: () => {
-          for (const m of moved) void patchTask(m.id, { due_date: m.was });
-        },
-      },
-    });
-  }
   const byPriority = useMemo(
     () => Object.fromEntries(PRIORITIES.map((p) => [p.key, open.filter((t) => t.priority === p.key)])) as Record<Priority, Task[]>,
     [open],
@@ -146,6 +149,7 @@ export function DashboardView() {
             {nextUp ? (
               <NextUpCard
                 task={nextUp}
+                now={nextUp === plan.now}
                 space={spaceById.get(nextUp.space_id)}
                 onDone={() => patchTask(nextUp.id, { status: "done" })}
                 onOpen={() => openTask(nextUp.id)}
@@ -204,8 +208,7 @@ export function DashboardView() {
                 active={phoneTab === "today"}
                 onClick={() => setPhoneTab("today")}
                 label="היום"
-                count={attention.overdue.length + attention.today.length + attention.urgent.length}
-                alert={attention.overdue.length > 0}
+                count={todayLeft}
               />
               <PhoneTabButton active={phoneTab === "all"} onClick={() => setPhoneTab("all")} label="הכול" count={open.length} />
               <PhoneTabButton active={phoneTab === "calendar"} onClick={() => setPhoneTab("calendar")} label="יומן" />
@@ -214,45 +217,19 @@ export function DashboardView() {
 
           <GestureTip />
 
+          <UpcomingEvents events={upcomingEvents} spaceById={spaceById} />
+
           {/* numbers */}
           <div className="mb-6 hidden grid-cols-2 gap-3 sm:grid sm:grid-cols-4">
             <Stat value={open.length} label="משימות פתוחות" />
-            <Stat value={attention.overdue.length} label="באיחור" tone={attention.overdue.length ? "bad" : undefined} />
-            <Stat value={attention.today.length} label="להיום" tone={attention.today.length ? "warn" : undefined} />
+            <Stat value={plan.overdue.length} label="מימים קודמים" tone={plan.overdue.length ? "warn" : undefined} />
+            <Stat value={todayLeft} label="להיום" tone={todayLeft ? "warn" : undefined} />
             <Stat value={doneThisWeek} label="נסגרו השבוע" tone={doneThisWeek ? "good" : undefined} />
           </div>
 
-          {/* needs attention */}
-          {phoneTab === "today" && !attention.overdue.length && !attention.today.length && !attention.urgent.length && (
-            <p className="mb-8 rounded-3xl border border-dashed border-slate-300 bg-surface py-10 text-center text-sm text-muted sm:hidden">
-              אין משהו דחוף, באיחור או להיום 🎉
-              <br />
-              <button onClick={() => setPhoneTab("all")} className="mt-2 font-bold text-primary">
-                לכל המשימות
-              </button>
-            </p>
-          )}
-          <div className={cn("mb-8 grid gap-3 sm:gap-4 lg:grid-cols-3", phoneTab !== "today" && "hidden sm:grid")}>
-            <AttentionColumn
-              title="באיחור"
-              icon={<AlertTriangle size={16} />}
-              color="#dc2626"
-              tasks={attention.overdue}
-              empty="אין משימות באיחור 👏"
-              spaceById={spaceById}
-              action={
-                attention.overdue.length > 0 && (
-                  <button
-                    onClick={overdueToToday}
-                    className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 transition hover:bg-red-100 active:scale-95"
-                  >
-                    הכול להיום
-                  </button>
-                )
-              }
-            />
-            <AttentionColumn title="להיום" icon={<CalendarClock size={16} />} color="#d97706" tasks={attention.today} empty="אין משימות להיום" spaceById={spaceById} />
-            <AttentionColumn title="דחוף" icon={<Zap size={16} />} color="#7c3aed" tasks={attention.urgent} empty="אין משימות דחופות" spaceById={spaceById} />
+          {/* my day */}
+          <div className={cn("mb-8 max-w-3xl", phoneTab !== "today" && "hidden sm:block")}>
+            <TodayPlan plan={plan} spaceById={spaceById} multi={shownSpaces.length > 1} />
           </div>
 
           {/* every open task */}
@@ -292,6 +269,14 @@ export function DashboardView() {
                 {PRIORITIES.map((p) => (
                   <PriorityPanel key={p.key} priority={p.key} tasks={[...byPriority[p.key]].sort(byDue)} spaceById={spaceById} />
                 ))}
+                {coveredAll.length > 0 && (
+                  <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-surface py-1 shadow-soft">
+                    <CoveredGroup
+                      tasks={coveredAll}
+                      render={(t) => <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace />}
+                    />
+                  </section>
+                )}
               </div>
             )}
           </section>
@@ -322,11 +307,14 @@ export function DashboardView() {
 
 function NextUpCard({
   task,
+  now,
   space,
   onDone,
   onOpen,
 }: {
   task: Task;
+  /** from the day plan (by the clock) rather than the general focus order */
+  now?: boolean;
   space?: Space;
   onDone: () => void;
   onOpen: () => void;
@@ -340,7 +328,7 @@ function NextUpCard({
     >
       <div className="mb-2 flex items-center gap-2 text-xs font-bold" style={{ color }}>
         <Target size={15} />
-        הדבר הבא
+        {now ? `עכשיו${task.due_time ? ` · ${task.due_time}` : ""}` : "הדבר הבא"}
         {space && (
           <span className="rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: color }}>
             {space.name}
@@ -350,6 +338,7 @@ function NextUpCard({
       <button onClick={onOpen} className="mb-2 block text-start text-xl font-bold leading-snug hover:underline sm:text-2xl">
         {task.title}
       </button>
+      {task.description && <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-muted">{task.description}</p>}
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <PriorityBadge priority={task.priority} />
         <DueLabel task={task} today={today} />
@@ -517,8 +506,10 @@ function PanelShell({
 }
 
 function SpacePanel({ space, tasks }: { space: Space; tasks: Task[] }) {
-  const { today } = useData();
-  const open = tasks.filter((t) => !isClosed(t.status)).sort(byImportance);
+  const { today, series, isTodo } = useData();
+  const open = tasks.filter((t) => isTodo(t)).sort(byImportance);
+  // repeating tasks already done for this round are folded away under one green line
+  const covered = tasks.filter((t) => series.get(t.id)?.covered).sort(byDue);
   const overdue = open.filter((t) => t.due_date && t.due_date < today).length;
   const done = tasks.filter((t) => t.status === "done").length;
   const notDone = tasks.filter((t) => t.status === "not_done").length;
@@ -552,6 +543,7 @@ function SpacePanel({ space, tasks }: { space: Space; tasks: Task[] }) {
       ) : (
         open.map((t) => <TaskRow key={t.id} task={t} showPriority />)
       )}
+      <CoveredGroup tasks={covered} render={(t) => <TaskRow key={t.id} task={t} />} />
     </PanelShell>
   );
 }
@@ -577,51 +569,6 @@ function PriorityPanel({ priority, tasks, spaceById }: { priority: Priority; tas
         <p className="py-5 text-center text-sm text-muted">אין משימות בעדיפות הזו</p>
       ) : (
         tasks.map((t) => <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace />)
-      )}
-    </PanelShell>
-  );
-}
-
-function AttentionColumn({
-  title,
-  icon,
-  color,
-  tasks,
-  empty,
-  spaceById,
-  action,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  color: string;
-  tasks: Task[];
-  empty: string;
-  spaceById: Map<number, Space>;
-  action?: React.ReactNode;
-}) {
-  return (
-    <PanelShell
-      color={color}
-      className={tasks.length === 0 ? "hidden sm:block" : undefined}
-      header={
-        <>
-          <span className="flex items-center gap-2 text-sm font-bold" style={{ color }}>
-            {icon}
-            {title}
-          </span>
-          <span className="flex items-center gap-2">
-            {action}
-            <span className="rounded-full px-2 py-0.5 text-xs font-bold" style={{ backgroundColor: `${color}1a`, color }}>
-              {tasks.length}
-            </span>
-          </span>
-        </>
-      }
-    >
-      {tasks.length === 0 ? (
-        <p className="py-5 text-center text-sm text-muted">{empty}</p>
-      ) : (
-        tasks.map((t) => <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace showPriority />)
       )}
     </PanelShell>
   );

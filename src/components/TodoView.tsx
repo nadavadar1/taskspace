@@ -8,6 +8,10 @@ import { QuickAdd } from "./QuickAdd";
 import { Swipeable } from "./Swipe";
 import { DeleteX } from "./TaskRow";
 import { GestureTip } from "./GestureTip";
+import { DoneCircle } from "./TaskRow";
+import { CoveredPill, HabitDots, useCovered } from "./Recurring";
+import { seriesKey } from "@/lib/recurrence";
+import { EventRow } from "./Events";
 import { StatusIcon, cn } from "./ui";
 import { PRIORITIES, PRIORITY_MAP, STATUS_MAP, isClosed } from "@/lib/constants";
 import type { Space, Task } from "@/lib/types";
@@ -40,25 +44,31 @@ function Check({ done, color, onToggle }: { done: boolean; color: string; onTogg
   );
 }
 
-function Row({ task }: { task: Task }) {
+function Row({ task, times }: { task: Task; times?: number }) {
   const { today, patchTask, openTask, deleteWithUndo, openActions } = useData();
   const done = task.status === "done";
   const notDone = task.status === "not_done";
+  const covered = useCovered(task);
   const p = PRIORITY_MAP[task.priority];
   return (
     <li>
     <Swipeable
       done={done}
-      onDone={notDone ? undefined : () => patchTask(task.id, { status: done ? "new" : "done" })}
+      onDone={notDone || covered ? undefined : () => patchTask(task.id, { status: done ? "new" : "done" })}
       onDelete={() => deleteWithUndo(task.id)}
       onLongPress={() => openActions(task.id)}
     >
     <div
       onClick={() => openTask(task.id)}
       data-task-row
-      className="group flex cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-3 transition hover:border-line hover:bg-slate-50 active:bg-slate-100 sm:py-2.5"
+      className={cn(
+        "group flex cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-3 transition hover:border-line hover:bg-slate-50 active:bg-slate-100 sm:py-2.5",
+        covered && "bg-emerald-50/70",
+      )}
     >
-      {notDone ? (
+      {covered ? (
+        <DoneCircle task={task} size={24} />
+      ) : notDone ? (
         <button
           data-no-swipe
           onClick={(e) => {
@@ -79,9 +89,16 @@ function Row({ task }: { task: Task }) {
         />
       )}
       <span className="min-w-0 flex-1">
-        <span className={cn("line-clamp-2 block text-[15px] leading-snug sm:truncate", done && "text-muted line-through", notDone && "text-muted")}>
+        <span className={cn("line-clamp-2 block text-[15px] leading-snug sm:truncate", done && "text-muted line-through", (notDone || covered) && "text-muted")}>
           {task.title}
+          {times && times > 1 && <span className="ms-1.5 text-xs font-bold text-emerald-600">×{times}</span>}
         </span>
+        {(covered || (task.recurrence !== "none" && !done)) && (
+          <span className="mt-1 flex flex-wrap items-center gap-2">
+            <CoveredPill task={task} />
+            <HabitDots task={task} />
+          </span>
+        )}
         {notDone && (
           <span className="mt-0.5 block text-xs leading-snug text-stone-500">
             {task.status_note ? (
@@ -103,7 +120,7 @@ function Row({ task }: { task: Task }) {
           {STATUS_MAP[task.status].label}
         </span>
       )}
-      <DueLabel task={task} today={today} />
+      {!covered && <DueLabel task={task} today={today} />}
       <DeleteX taskId={task.id} title={task.title} />
     </div>
     </Swipeable>
@@ -112,13 +129,30 @@ function Row({ task }: { task: Task }) {
 }
 
 export function TodoView({ space }: { space: Space }) {
-  const { tasks } = useData();
+  const { tasks, series, today: todayStr } = useData();
   const [showDone, setShowDone] = useState(false);
   const [showNotDone, setShowNotDone] = useState(true);
 
   const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id), [tasks, space.id]);
-  const open = spaceTasks.filter((t) => !isClosed(t.status));
-  const done = spaceTasks.filter((t) => t.status === "done").sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
+  const events = spaceTasks
+    .filter((t) => t.is_event && (!t.due_date || t.due_date >= todayStr))
+    .sort((a, b) => (a.due_date ?? "9").localeCompare(b.due_date ?? "9"));
+  const allOpen = spaceTasks.filter((t) => !isClosed(t.status) && !t.is_event);
+  // repeating tasks already done for this round get their own green section
+  const coveredList = allOpen.filter((t) => series.get(t.id)?.covered).sort(byDueThenPosition);
+  const open = allOpen.filter((t) => !series.get(t.id)?.covered);
+  const doneAll = spaceTasks.filter((t) => t.status === "done" && !t.is_event).sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
+  // a repeating task shows once in "הושלמו" (its latest copy), with how many times it was done
+  const doneCount = new Map<string, number>();
+  for (const t of doneAll) if (t.recurrence !== "none") doneCount.set(seriesKey(t), (doneCount.get(seriesKey(t)) ?? 0) + 1);
+  const seen = new Set<string>();
+  const done = doneAll.filter((t) => {
+    if (t.recurrence === "none") return true;
+    const k = seriesKey(t);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   const notDone = spaceTasks.filter((t) => t.status === "not_done").sort(byDueThenPosition);
 
   const groups = PRIORITIES.map((p) => ({
@@ -133,7 +167,18 @@ export function TodoView({ space }: { space: Space }) {
       </div>
       <GestureTip />
 
-      {groups.length === 0 && (
+      {events.length > 0 && (
+        <section className="mb-5">
+          <h3 className="mb-1 flex items-center gap-2 px-3 text-sm font-bold text-primary">📅 אירועים קרובים ביומן<span className="text-xs font-medium text-muted">{events.length}</span></h3>
+          <div className="rounded-2xl border border-line bg-surface p-1 shadow-soft">
+            {events.map((t) => (
+              <EventRow key={t.id} task={t} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {groups.length === 0 && coveredList.length === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 py-14 text-center text-muted">
           {done.length || notDone.length ? "אין משימות פתוחות. כל הכבוד! 🎉" : "אין משימות עדיין. הוסף את הראשונה למעלה."}
         </div>
@@ -154,6 +199,21 @@ export function TodoView({ space }: { space: Space }) {
             </ul>
           </section>
         ))}
+
+        {coveredList.length > 0 && (
+          <section>
+            <h3 className="mb-1 flex items-center gap-2 px-3 text-sm font-bold text-emerald-600">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">✓</span>
+              בוצעו לתקופה הזו
+              <span className="text-xs font-medium text-muted">{coveredList.length}</span>
+            </h3>
+            <ul className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-1 shadow-soft">
+              {coveredList.map((t) => (
+                <Row key={t.id} task={t} />
+              ))}
+            </ul>
+          </section>
+        )}
 
         {notDone.length > 0 && (
           <section>
@@ -188,7 +248,7 @@ export function TodoView({ space }: { space: Space }) {
             {showDone && (
               <ul className="anim-fade rounded-2xl border border-line bg-surface p-1 shadow-soft">
                 {done.map((t) => (
-                  <Row key={t.id} task={t} />
+                  <Row key={t.id} task={t} times={t.recurrence !== "none" ? doneCount.get(seriesKey(t)) : undefined} />
                 ))}
               </ul>
             )}

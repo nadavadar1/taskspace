@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { listTasks } from "@/lib/store";
-import { isClosed } from "@/lib/constants";
+import { getSettings, listTasks } from "@/lib/store";
+import { byClock } from "@/lib/day-plan";
+import { isOpenTask } from "@/lib/constants";
 import { todayISO } from "@/lib/dates";
 import { broadcastPush } from "@/lib/push";
 
@@ -20,19 +21,22 @@ async function run(req: Request): Promise<Response> {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const today = todayISO();
-    const tasks = await listTasks();
-    const open = tasks.filter((t) => !isClosed(t.status));
+    const [tasks, settings] = await Promise.all([listTasks(), getSettings()]);
+    const open = tasks.filter((t) => isOpenTask(t));
     const overdue = open.filter((t) => t.due_date && t.due_date < today).length;
-    const dueToday = open.filter((t) => t.due_date === today).length;
-    if (!overdue && !dueToday) {
+    const todays = open.filter((t) => t.due_date === today).sort(byClock);
+    if (!overdue && !todays.length) {
       return NextResponse.json({ skipped: true, reason: "nothing due or overdue" });
     }
-    const parts: string[] = [];
-    if (overdue) parts.push(`${overdue} באיחור`);
-    if (dueToday) parts.push(`${dueToday} להיום`);
+    // the plan in a few lines: the note, the first three by the clock, and what is left
+    const lines: string[] = [];
+    if (settings.day_note?.date === today) lines.push(`⭐ ${settings.day_note.text}`);
+    for (const t of todays.slice(0, 3)) lines.push(`${t.due_time ? `${t.due_time} ` : "• "}${t.title}`);
+    if (todays.length > 3) lines.push(`ועוד ${todays.length - 3}`);
+    if (overdue) lines.push(`${overdue} נשארו מימים קודמים`);
     const result = await broadcastPush({
-      title: "☀️ סיכום בוקר",
-      body: parts.join(" · "),
+      title: `☀️ בוקר טוב! ${todays.length ? `${todays.length} משימות להיום` : "תוכנית היום"}`,
+      body: lines.join("\n"),
       url: "/",
       tag: "morning-briefing",
     });

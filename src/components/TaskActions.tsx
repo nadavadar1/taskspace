@@ -9,12 +9,14 @@ import { addDays, dayOfWeek, relativeLabel } from "@/lib/dates";
 
 /** Long press (or right click) on a task: the common changes in one tap, without opening the full form. */
 export function TaskActionsSheet() {
-  const { actionsFor, closeActions, tasks, spaces, today, patchTask, deleteWithUndo, openTask, toast } = useData();
+  const { actionsFor, closeActions, tasks, spaces, today, patchTask, deleteWithUndo, openTask, toast, series } = useData();
   const router = useRouter();
   const task = actionsFor !== null ? tasks.find((t) => t.id === actionsFor) : undefined;
   if (!task) return null;
 
   const done = task.status === "done";
+  const covered = !!series.get(task.id)?.covered;
+  const isEvent = task.is_event;
   const toSunday = (7 - dayOfWeek(today)) % 7 || 7;
   const dates: { label: string; value: string | null }[] = [
     { label: "היום", value: today },
@@ -33,13 +35,20 @@ export function TaskActionsSheet() {
   return (
     <Sheet open onClose={closeActions} title={<span className="line-clamp-2 leading-snug">{task.title}</span>}>
       <div className="space-y-4 px-2 pb-2">
-        <div className="grid grid-cols-3 gap-2">
-          <BigAction
-            icon={done ? <RotateCcw size={20} /> : <Check size={20} />}
-            label={done ? "לפתוח מחדש" : "בוצע"}
-            className="bg-emerald-50 text-emerald-700"
-            onClick={() => apply({ status: done ? "new" : "done" })}
-          />
+        <div className={cn("grid gap-2", isEvent ? "grid-cols-2" : "grid-cols-3")}>
+          {isEvent ? null : covered ? (
+            <div className="flex flex-col items-center gap-1.5 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white" aria-disabled>
+              <Check size={20} strokeWidth={3} />
+              כבר בוצע
+            </div>
+          ) : (
+            <BigAction
+              icon={done ? <RotateCcw size={20} /> : <Check size={20} />}
+              label={done ? "לפתוח מחדש" : "בוצע"}
+              className="bg-emerald-50 text-emerald-700"
+              onClick={() => apply({ status: done ? "new" : "done" })}
+            />
+          )}
           <BigAction
             icon={<Pencil size={19} />}
             label="עריכה"
@@ -57,7 +66,7 @@ export function TaskActionsSheet() {
           />
         </div>
 
-        {!isClosed(task.status) && (
+        {!isClosed(task.status) && !isEvent && !covered && (
           <button
             onClick={() => {
               closeActions();
@@ -88,6 +97,7 @@ export function TaskActionsSheet() {
           )}
         </Group>
 
+        {!isEvent && (
         <Group label="עדיפות">
           {PRIORITIES.map((p) => (
             <Chip key={p.key} on={task.priority === p.key} color={p.color} onClick={() => apply({ priority: p.key })}>
@@ -96,6 +106,7 @@ export function TaskActionsSheet() {
             </Chip>
           ))}
         </Group>
+        )}
 
         {spaces.length > 1 && (
           <Group label="מרחב">

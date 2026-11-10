@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { claimDueReminders } from "@/lib/reminders";
 import { broadcastPush } from "@/lib/push";
-import { getTask } from "@/lib/store";
+import { claimTimedNudges, getTask } from "@/lib/store";
 
 // Polled every minute by an external free cron service (cron-job.org). Vercel's own free-tier
 // cron only fires once a day, so this route is the real scheduler. It must not require a
@@ -44,7 +44,18 @@ async function run(req: Request): Promise<Response> {
       });
       sent += result.sent;
     }
-    return NextResponse.json({ checked: due.length, sent });
+    // a task with a time pushes a few minutes before it, without having to set a reminder by hand
+    const nudges = await claimTimedNudges();
+    for (const t of nudges) {
+      const result = await broadcastPush({
+        title: `⏰ ${t.due_time} · ${t.title}`,
+        body: t.description ? t.description.slice(0, 160) : "עוד כמה דקות. אפשר להתחיל.",
+        url: "/",
+        tag: `nudge-${t.id}`,
+      });
+      sent += result.sent;
+    }
+    return NextResponse.json({ checked: due.length, nudged: nudges.length, sent });
   } catch (e) {
     console.error("[cron/reminders]", e);
     return NextResponse.json({ error: "internal error" }, { status: 500 });

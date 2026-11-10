@@ -35,6 +35,8 @@ export interface Task {
   recurrence: Recurrence;
   /** Only meaningful when recurrence === "every_n_days". */
   recurrence_n: number | null;
+  /** A calendar entry to know about and prepare for (an exam, a meeting), not something to tick off. */
+  is_event: boolean;
   position: number;
   created_at: string;
   completed_at: string | null;
@@ -42,6 +44,8 @@ export interface Task {
 
 export interface Settings {
   dashboard_spaces: number[] | null; // null = all
+  /** "the most important today" line on the home screen; shown only on its own day */
+  day_note: { date: string; text: string } | null;
 }
 
 export type RepeatKind = "none" | "hourly" | "daily" | "weekly" | "every_n_days";

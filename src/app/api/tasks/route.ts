@@ -18,6 +18,7 @@ export const POST = guarded(async (req) => {
     checklist: Array.isArray(body.checklist) ? body.checklist : undefined,
     recurrence: typeof body.recurrence === "string" ? body.recurrence : undefined,
     recurrence_n: typeof body.recurrence_n === "number" ? body.recurrence_n : null,
+    is_event: body.is_event === true,
     position: typeof body.position === "number" ? body.position : undefined,
   });
   return NextResponse.json({ task });
