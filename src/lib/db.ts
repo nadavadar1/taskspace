@@ -53,6 +53,8 @@ async function init(): Promise<void> {
   await db`alter table ts_tasks add column if not exists recurrence text not null default 'none'`;
   await db`alter table ts_tasks add column if not exists recurrence_n integer`;
   await db`alter table ts_tasks add column if not exists is_event boolean not null default false`;
+  // "date time" a push was already sent for, so a timed task nudges once (and again if its time changes)
+  await db`alter table ts_tasks add column if not exists nudged_for text`;
   await db`create index if not exists ts_tasks_space_idx on ts_tasks(space_id)`;
   await db`
     create table if not exists ts_settings (

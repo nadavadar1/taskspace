@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarDays,
   ChevronLeft,
+  ClipboardList,
   Home,
   LayoutDashboard,
   Layers,
@@ -28,6 +29,7 @@ import { NotificationsButton } from "./NotificationsButton";
 import { CommandPalette } from "./CommandPalette";
 import { QuickAdd } from "./QuickAdd";
 import { TaskActionsSheet } from "./TaskActions";
+import { PasteTasks } from "./PasteTasks";
 
 const MAIN_LINKS = [
   { href: "/", label: "דשבורד", icon: LayoutDashboard },
@@ -75,6 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     chatOpen,
     setChatOpen,
     isTodo,
+    openPaste,
   } = useData();
   const pathname = usePathname();
   const router = useRouter();
@@ -90,6 +93,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       block: "nearest",
     });
   }, [pathname]);
+
+  // "?paste=…" (e.g. from an iPhone Shortcut that dictates) opens the paste sheet with that text
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const text = url.searchParams.get("paste");
+    if (text === null) return;
+    url.searchParams.delete("paste");
+    window.history.replaceState(null, "", url.pathname + url.search);
+    openPaste(text);
+  }, [openPaste]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -320,7 +333,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <p className="mt-3 text-xs leading-relaxed text-muted">
           כותבים במשפט אחד, והמערכת מבינה לבד תאריך, שעה, עדיפות ו-#מרחב. למשל: ״לשלם ארנונה ביום ראשון חשוב #בית״.
         </p>
+        <button
+          onClick={() => {
+            setQuickAddOpen(false);
+            openPaste();
+          }}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-line py-3 text-sm font-bold text-primary active:bg-slate-50"
+        >
+          <ClipboardList size={17} />
+          הרבה משימות? הדבקת רשימה או הכתבה
+        </button>
       </Modal>
+      <PasteTasks />
 
       <ChatWidget />
       <TaskDialog />

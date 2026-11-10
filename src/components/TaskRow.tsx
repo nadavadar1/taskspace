@@ -91,11 +91,14 @@ export function TaskRow({
   space,
   showSpace,
   showPriority,
+  clock,
 }: {
   task: Task;
   space?: Space;
   showSpace?: boolean;
   showPriority?: boolean;
+  /** in the day plan: the time stands out on the side and the (known) date is left out */
+  clock?: boolean;
 }) {
   const { today, openTask, patchTask, deleteWithUndo, openActions } = useData();
   const p = PRIORITY_MAP[task.priority];
@@ -140,10 +143,13 @@ export function TaskRow({
         >
           {task.title}
         </span>
-        <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        {task.description && !closed && (
+          <span className="mt-0.5 line-clamp-1 block text-[13px] leading-snug text-muted">{task.description}</span>
+        )}
+        <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 empty:hidden">
           {covered ? (
             <CoveredPill task={task} />
-          ) : task.due_date ? (
+          ) : clock ? null : task.due_date ? (
             <DueLabel task={task} today={today} />
           ) : (
             <span className="text-xs text-slate-400">ללא תאריך</span>
@@ -159,6 +165,9 @@ export function TaskRow({
           )}
         </span>
       </span>
+      {clock && task.due_time && (
+        <span className={cn("shrink-0 text-sm font-bold tabular-nums", closed ? "text-slate-300" : "text-primary")}>{task.due_time}</span>
+      )}
       <DeleteX taskId={task.id} title={task.title} />
     </div>
     </Swipeable>

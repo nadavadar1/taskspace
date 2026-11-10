@@ -44,6 +44,8 @@ export interface Task {
 
 export interface Settings {
   dashboard_spaces: number[] | null; // null = all
+  /** "the most important today" line on the home screen; shown only on its own day */
+  day_note: { date: string; text: string } | null;
 }
 
 export type RepeatKind = "none" | "hourly" | "daily" | "weekly" | "every_n_days";
