@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ClipboardList, Moon, Pencil, Plus, Star } from "lucide-react";
+import { ChevronDown, ClipboardList, Hourglass, Moon, Pencil, Plus, Star, Sun, Trophy } from "lucide-react";
 import { useData } from "./DataProvider";
 import { TaskRow } from "./TaskRow";
 import { cn, useMounted } from "./ui";
 import { addDays, nowHHMM } from "@/lib/dates";
+import { completionStreak } from "@/lib/focus";
 import type { DayPlan } from "@/lib/day-plan";
 import type { Space, Task } from "@/lib/types";
 
@@ -24,7 +25,18 @@ export function useNowHM(): string {
  * "My day" (the home screen's first tab): the one line that matters most, what is left from before (one
  * card, not a red wall), the day by the clock, then tomorrow / this week / later / no date folded away.
  */
-export function TodayPlan({ plan, spaceById, multi }: { plan: DayPlan; spaceById: Map<number, Space>; multi: boolean }) {
+export function TodayPlan({
+  plan,
+  spaceById,
+  multi,
+  onPlan,
+}: {
+  plan: DayPlan;
+  spaceById: Map<number, Space>;
+  multi: boolean;
+  /** opens the one-minute morning plan */
+  onPlan: () => void;
+}) {
   const { today, patchTask, toast, openPaste, openNewTask } = useData();
   const nowHM = useNowHM();
   const row = (t: Task, clock = false) => (
@@ -82,6 +94,13 @@ export function TodayPlan({ plan, spaceById, multi }: { plan: DayPlan; spaceById
         <header className="flex items-center justify-between gap-2 px-4 pb-1 pt-3.5">
           <h2 className="text-base font-bold">תוכנית היום</h2>
           <button
+            onClick={onPlan}
+            className="ms-auto flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 active:scale-95"
+          >
+            <Sun size={14} />
+            לתכנן
+          </button>
+          <button
             onClick={() => openPaste()}
             className="flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary active:scale-95"
           >
@@ -122,6 +141,22 @@ export function TodayPlan({ plan, spaceById, multi }: { plan: DayPlan; spaceById
           </div>
         )}
       </section>
+
+      {plan.waiting.length > 0 && (
+        <section className="overflow-hidden rounded-2xl border border-purple-200 bg-surface shadow-soft" data-waiting>
+          <header className="flex items-center gap-2 px-4 pb-1 pt-3">
+            <Hourglass size={16} className="text-purple-600" />
+            <span className="font-bold">מחכה לתשובה</span>
+            <span className="rounded-full bg-purple-50 px-2 text-xs font-bold leading-5 text-purple-700">{plan.waiting.length}</span>
+          </header>
+          <p className="px-4 text-xs text-muted">לא תלוי בך כרגע. בתאריך של כל אחת: לבדוק אם ענו, ואם לא, לשלוח תזכורת.</p>
+          <div className="px-1.5 pb-2">
+            {plan.waiting.map((t) => row(t))}
+          </div>
+        </section>
+      )}
+
+      {plan.done.length > 0 && <DoneToday tasks={plan.done} />}
 
       <Horizon title="מחר" tasks={plan.tomorrow} render={(t) => row(t)} defaultOpen />
       <Horizon title="עד סוף השבוע" tasks={plan.week} render={(t) => row(t)} />
@@ -258,6 +293,40 @@ function Horizon({
         <ChevronDown size={17} className={cn("ms-auto text-muted transition", open && "rotate-180")} />
       </button>
       {open && <div className="px-1.5 pb-2">{tasks.map(render)}</div>}
+    </section>
+  );
+}
+
+/** The day's wins, so progress is something you see (and the streak, when there is one). */
+function DoneToday({ tasks }: { tasks: Task[] }) {
+  const { tasks: all, today } = useData();
+  const [open, setOpen] = useState(false);
+  const streak = completionStreak(all, today);
+  const n = tasks.length;
+  return (
+    <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-l from-emerald-50 to-teal-50 shadow-soft" data-done-today>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 px-4 py-3 text-start" aria-expanded={open}>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-soft">
+          <Trophy size={19} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold text-emerald-900">
+            {n === 1 ? "עשית היום משימה אחת" : `עשית היום ${n} משימות`} {n >= 10 ? "🏆" : n >= 5 ? "🚀" : n >= 3 ? "🔥" : "👏"}
+          </span>
+          {streak >= 2 && <span className="block text-xs font-bold text-orange-600">{streak} ימים ברצף שאתה סוגר משימות</span>}
+        </span>
+        <ChevronDown size={17} className={cn("text-emerald-700 transition", open && "rotate-180")} />
+      </button>
+      {open && (
+        <ul className="space-y-1 px-4 pb-3">
+          {tasks.map((t) => (
+            <li key={t.id} className="flex items-start gap-2 text-sm text-emerald-950">
+              <span className="mt-0.5 text-emerald-500">✓</span>
+              <span className="min-w-0">{t.title}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

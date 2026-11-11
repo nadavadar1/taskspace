@@ -438,3 +438,26 @@ export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "t
     due_time: r.due_time as string,
   }));
 }
+
+/* ----------------------------- lock-screen wallpaper key ----------------------------- */
+
+/**
+ * The secret in the wallpaper link (an iPhone Shortcut fetches the image without a login).
+ * `create` makes one on first use; `rotate` replaces it so an old link stops working.
+ */
+export async function wallpaperKey(mode: "read" | "create" | "rotate" = "read"): Promise<string | null> {
+  await ensureSchema();
+  const db = sql();
+  if (mode !== "rotate") {
+    const rows = await db`select value from ts_settings where key = 'wallpaper_key'`;
+    let v = rows[0]?.value;
+    if (typeof v === "string" && v.startsWith('"')) v = JSON.parse(v);
+    if (typeof v === "string" && v.length >= 32) return v;
+    if (mode === "read") return null;
+  }
+  const key = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  await db`
+    insert into ts_settings (key, value) values ('wallpaper_key', ${db.json(key)})
+    on conflict (key) do update set value = excluded.value`;
+  return key;
+}
