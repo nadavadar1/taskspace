@@ -15,6 +15,7 @@ import { GestureTip } from "./GestureTip";
 import { UpcomingEvents } from "./Events";
 import { CoveredGroup } from "./Recurring";
 import { TodayPlan, useNowHM } from "./TodayPlan";
+import { MorningRitual, useMorningRitual } from "./MorningRitual";
 import { planDay } from "@/lib/day-plan";
 import { PRIORITIES, PRIORITY_MAP } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
@@ -80,6 +81,7 @@ export function DashboardView() {
   );
 
   const nowHM = useNowHM();
+  const [ritualOpen, setRitualOpen] = useMorningRitual();
   const plan = useMemo(() => {
     const doneToday = scoped.filter(
       (t) => !t.is_event && t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
@@ -130,6 +132,8 @@ export function DashboardView() {
           </button>
         </div>
       </div>
+
+      {ritualOpen && spaces.length > 0 && <MorningRitual open onClose={() => setRitualOpen(false)} />}
 
       {spaces.length === 0 ? (
         <div className="mx-auto mt-16 max-w-md rounded-3xl border border-dashed border-slate-300 bg-surface p-10 text-center">
@@ -229,7 +233,7 @@ export function DashboardView() {
 
           {/* my day */}
           <div className={cn("mb-8 max-w-3xl", phoneTab !== "today" && "hidden sm:block")}>
-            <TodayPlan plan={plan} spaceById={spaceById} multi={shownSpaces.length > 1} />
+            <TodayPlan plan={plan} spaceById={spaceById} multi={shownSpaces.length > 1} onPlan={() => setRitualOpen(true)} />
           </div>
 
           {/* every open task */}
@@ -351,12 +355,12 @@ function NextUpCard({
       )}
       <div className="flex flex-wrap gap-2">
         <Link
-          href={`/focus?task=${task.id}`}
+          href={`/focus?task=${task.id}&start=15`}
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:brightness-110"
           style={{ backgroundColor: color }}
         >
           <Play size={15} />
-          להתחיל עכשיו
+          15 דקות עכשיו
         </Link>
         <button
           onClick={onDone}
