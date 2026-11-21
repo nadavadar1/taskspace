@@ -9,7 +9,8 @@ const g = globalThis as unknown as {
 
 export function sql(): postgres.Sql {
   if (!g.__tsSql) {
-    const url = process.env.DATABASE_URL;
+    // DB2_ = the second free database (Nov 2026: the first one ran out of its monthly compute quota)
+    const url = process.env.DB2_DATABASE_URL || process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set");
     const local = /@(localhost|127\.0\.0\.1)/.test(url);
     g.__tsSql = postgres(url, {

@@ -30,7 +30,7 @@ function loadTimer(): TimerState {
   } catch {
     /* blocked storage */
   }
-  return { taskId: null, minutes: 25, endAt: null, left: null };
+  return { taskId: null, minutes: 15, endAt: null, left: null };
 }
 
 function saveTimer(t: TimerState) {
@@ -74,7 +74,22 @@ function FocusInner() {
   const params = useSearchParams();
   const { series } = useData();
   const queue = useMemo(() => focusQueue(tasks, today, series), [tasks, today, series]);
-  const [timer, setTimerState] = useState<TimerState>(loadTimer);
+  // "?task=ID&start=15": the timer is already running when the screen opens (one tap from a task)
+  const [timer, setTimerState] = useState<TimerState>(() => {
+    const minutes = Number(params.get("start"));
+    const taskId = Number(params.get("task"));
+    if (!(minutes > 0 && taskId > 0)) return loadTimer();
+    const t = { taskId, minutes, endAt: Date.now() + minutes * 60_000, left: null };
+    saveTimer(t);
+    return t;
+  });
+  useEffect(() => {
+    const taskId = Number(params.get("task"));
+    if (!params.get("start") || !(taskId > 0)) return;
+    window.history.replaceState(null, "", `/focus?task=${taskId}`); // a reload must not restart it
+    if (tasks.find((t) => t.id === taskId)?.status === "new") void patchTask(taskId, { status: "in_progress" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
   const [skipped, setSkipped] = useState<number[]>([]);
   const [picked, setPicked] = useState<number | null>(() => {
     const fromUrl = Number(params.get("task"));

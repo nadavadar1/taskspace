@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarX2, Check, Pencil, RotateCcw, Target, Trash2 } from "lucide-react";
+import { CalendarX2, Check, Hourglass, Pencil, RotateCcw, Target, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useData } from "./DataProvider";
 import { Sheet, cn } from "./ui";
@@ -70,12 +70,30 @@ export function TaskActionsSheet() {
           <button
             onClick={() => {
               closeActions();
-              router.push(`/focus?task=${task.id}`);
+              router.push(`/focus?task=${task.id}&start=15`);
             }}
             className="flex w-full items-center justify-center gap-2 rounded-2xl border border-line py-3 text-sm font-bold text-primary active:bg-slate-50"
           >
             <Target size={17} />
-            להתמקד בה עכשיו
+            15 דקות על זה עכשיו
+          </button>
+        )}
+
+        {!isEvent && !isClosed(task.status) && (
+          <button
+            onClick={() =>
+              apply(
+                { status: task.status === "on_hold" ? "new" : "on_hold" },
+                task.status === "on_hold" ? "חזרה לרשימה הרגילה" : "עברה ל'מחכה לתשובה'. כדאי לקבוע תאריך לבדיקה",
+              )
+            }
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-2xl border py-3 text-sm font-bold active:scale-[0.98]",
+              task.status === "on_hold" ? "border-purple-600 bg-purple-600 text-white" : "border-purple-200 text-purple-700",
+            )}
+          >
+            <Hourglass size={17} />
+            {task.status === "on_hold" ? "קיבלתי תשובה (להחזיר לרשימה)" : "מחכה לתשובה ממישהו"}
           </button>
         )}
 

@@ -15,6 +15,7 @@ import { GestureTip } from "./GestureTip";
 import { UpcomingEvents } from "./Events";
 import { CoveredGroup } from "./Recurring";
 import { TodayPlan, useNowHM } from "./TodayPlan";
+import { MorningRitual, useMorningRitual } from "./MorningRitual";
 import { planDay } from "@/lib/day-plan";
 import { PRIORITIES, PRIORITY_MAP } from "@/lib/constants";
 import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
@@ -22,8 +23,8 @@ import type { Priority, Space, Task } from "@/lib/types";
 
 type Grouping = "space" | "priority";
 const GROUPINGS: readonly Grouping[] = ["space", "priority"];
-type PhoneTab = "today" | "all" | "calendar";
-const PHONE_TABS: readonly PhoneTab[] = ["today", "all", "calendar"];
+type PhoneTab = "today" | "general";
+const PHONE_TABS: readonly PhoneTab[] = ["today", "general"];
 
 function greeting(): string {
   const h = Number(
@@ -80,6 +81,7 @@ export function DashboardView() {
   );
 
   const nowHM = useNowHM();
+  const [ritualOpen, setRitualOpen] = useMorningRitual();
   const plan = useMemo(() => {
     const doneToday = scoped.filter(
       (t) => !t.is_event && t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
@@ -131,6 +133,8 @@ export function DashboardView() {
         </div>
       </div>
 
+      {ritualOpen && spaces.length > 0 && <MorningRitual open onClose={() => setRitualOpen(false)} />}
+
       {spaces.length === 0 ? (
         <div className="mx-auto mt-16 max-w-md rounded-3xl border border-dashed border-slate-300 bg-surface p-10 text-center">
           <p className="mb-1 text-lg font-bold">בוא נתחיל</p>
@@ -144,8 +148,25 @@ export function DashboardView() {
         </div>
       ) : (
         <>
+          {/* phone tabs */}
+          <div
+            className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-3 mb-4 bg-bg/90 px-3 py-2 backdrop-blur-xl sm:hidden"
+            role="tablist"
+            aria-label="מה להציג"
+          >
+            <div className="grid grid-cols-2 gap-1 rounded-2xl border border-line bg-surface p-1 shadow-soft">
+              <PhoneTabButton active={phoneTab === "today"} onClick={() => setPhoneTab("today")} label="היום" count={todayLeft} />
+              <PhoneTabButton
+                active={phoneTab === "general"}
+                onClick={() => setPhoneTab("general")}
+                label="כללי"
+                count={plan.tomorrow.length + plan.week.length + plan.later.length + plan.someday.length}
+              />
+            </div>
+          </div>
+
           {/* hero: the one next thing + today's progress */}
-          <div className="mb-4 grid gap-3 sm:mb-5 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className={cn("mb-4 grid gap-3 sm:mb-5 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_300px]", phoneTab !== "today" && "hidden sm:grid")}>
             {nextUp ? (
               <NextUpCard
                 task={nextUp}
@@ -159,7 +180,9 @@ export function DashboardView() {
                 אין משימות פתוחות. כל הכבוד! 🎉
               </div>
             )}
-            <TodayCard done={closedToday} left={leftToday} streak={streak} />
+            <div className="hidden sm:block">
+              <TodayCard done={closedToday} left={leftToday} streak={streak} />
+            </div>
           </div>
 
           <div className="mb-6 hidden sm:block">
@@ -167,7 +190,7 @@ export function DashboardView() {
           </div>
 
           {/* space picker: one sideways-scrolling line on a phone */}
-          <div className="scroll-thin -mx-3 mb-4 flex items-center gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:mb-5 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+          <div className="scroll-thin hidden items-center gap-2 sm:mb-5 sm:flex sm:flex-wrap">
             <span className="me-1 hidden text-sm font-medium text-slate-500 sm:inline">מציג:</span>
             <button
               onClick={() => setDashboardSpaces(null)}
@@ -197,27 +220,11 @@ export function DashboardView() {
             })}
           </div>
 
-          {/* phone tabs */}
-          <div
-            className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-3 mb-4 bg-bg/90 px-3 py-2 backdrop-blur-xl sm:hidden"
-            role="tablist"
-            aria-label="מה להציג"
-          >
-            <div className="grid grid-cols-3 gap-1 rounded-2xl border border-line bg-surface p-1 shadow-soft">
-              <PhoneTabButton
-                active={phoneTab === "today"}
-                onClick={() => setPhoneTab("today")}
-                label="היום"
-                count={todayLeft}
-              />
-              <PhoneTabButton active={phoneTab === "all"} onClick={() => setPhoneTab("all")} label="הכול" count={open.length} />
-              <PhoneTabButton active={phoneTab === "calendar"} onClick={() => setPhoneTab("calendar")} label="יומן" />
-            </div>
-          </div>
-
           <GestureTip />
 
-          <UpcomingEvents events={upcomingEvents} spaceById={spaceById} />
+          <div className={cn(phoneTab !== "general" && "hidden sm:block")}>
+            <UpcomingEvents events={upcomingEvents} spaceById={spaceById} />
+          </div>
 
           {/* numbers */}
           <div className="mb-6 hidden grid-cols-2 gap-3 sm:grid sm:grid-cols-4">
@@ -228,12 +235,12 @@ export function DashboardView() {
           </div>
 
           {/* my day */}
-          <div className={cn("mb-8 max-w-3xl", phoneTab !== "today" && "hidden sm:block")}>
-            <TodayPlan plan={plan} spaceById={spaceById} multi={shownSpaces.length > 1} />
+          <div className="mb-8 max-w-3xl">
+            <TodayPlan plan={plan} spaceById={spaceById} multi={shownSpaces.length > 1} onPlan={() => setRitualOpen(true)} part={phoneTab} />
           </div>
 
           {/* every open task */}
-          <section className={cn("mb-8", phoneTab !== "all" && "hidden sm:block")}>
+          <section className="mb-8 hidden sm:block">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <h2 className="hidden text-lg font-bold sm:block">
                 כל המשימות הפתוחות <span className="text-sm font-medium text-muted">({open.length})</span>
@@ -282,7 +289,7 @@ export function DashboardView() {
           </section>
 
           {/* combined calendar */}
-          <section className={cn("mb-8", phoneTab !== "calendar" && "hidden sm:block")}>
+          <section className="mb-8 hidden sm:block">
             <div className="mb-3 hidden items-center justify-between gap-3 sm:flex">
               <h2 className="flex items-center gap-2 text-lg font-bold">
                 <CalendarDays size={18} className="text-slate-400" />
@@ -351,12 +358,12 @@ function NextUpCard({
       )}
       <div className="flex flex-wrap gap-2">
         <Link
-          href={`/focus?task=${task.id}`}
+          href={`/focus?task=${task.id}&start=15`}
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:brightness-110"
           style={{ backgroundColor: color }}
         >
           <Play size={15} />
-          להתחיל עכשיו
+          15 דקות עכשיו
         </Link>
         <button
           onClick={onDone}

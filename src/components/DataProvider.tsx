@@ -99,6 +99,13 @@ interface DataCtx {
 
 const Ctx = createContext<DataCtx | null>(null);
 
+const MILESTONES: Record<number, string> = {
+  3: "🔥 כבר 3 היום. יש תנופה!",
+  5: "🚀 5 משימות היום!",
+  10: "🏆 10 היום. יום אדיר!",
+  20: "👑 20 היום. מה קורה פה?!",
+};
+
 export function useData(): DataCtx {
   const v = useContext(Ctx);
   if (!v) throw new Error("useData outside provider");
@@ -216,6 +223,8 @@ export function DataProvider({
       setTasks((list) => list.map((t) => (t.id === id ? localPatch(t, patch) : t)));
       const justDone = patch.status === "done" && before && before.status !== "done";
       if (justDone) setCelebration((n) => n + 1);
+      const doneTodayCount =
+        tasksRef.current.filter((t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === todayISO()).length + 1;
       try {
         const { task, spawned } = await request<{ task: Task; spawned?: Task | null }>(`/api/tasks/${id}`, "PATCH", patch);
         setTasks((list) => [...list.map((t) => (t.id === id ? task : t)), ...(spawned ? [spawned] : [])]);
@@ -232,10 +241,13 @@ export function DataProvider({
             });
             if (spawned) void removeTaskRef.current?.(spawned.id);
           };
+          // a few round numbers a day get a bigger cheer
+          const cheer = MILESTONES[doneTodayCount];
           toast(
-            spawned && spawned.due_date
-              ? `כל הכבוד! הפעם הבאה: ${relativeLabel(spawned.due_date, todayISO())}`
-              : "כל הכבוד! המשימה הושלמה",
+            cheer ??
+              (spawned && spawned.due_date
+                ? `כל הכבוד! הפעם הבאה: ${relativeLabel(spawned.due_date, todayISO())}`
+                : "כל הכבוד! המשימה הושלמה"),
             { tone: "success", action: { label: "ביטול", run: undo } },
           );
         }

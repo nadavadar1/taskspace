@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   Plus,
   Search,
+  Smartphone,
   Sparkles,
   Sun,
   Target,
@@ -30,6 +31,7 @@ import { CommandPalette } from "./CommandPalette";
 import { QuickAdd } from "./QuickAdd";
 import { TaskActionsSheet } from "./TaskActions";
 import { PasteTasks } from "./PasteTasks";
+import { WallpaperSheet } from "./WallpaperSheet";
 
 const MAIN_LINKS = [
   { href: "/", label: "דשבורד", icon: LayoutDashboard },
@@ -84,6 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navRef = useRef<HTMLElement>(null);
   const [spacesOpen, setSpacesOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [theme, setTheme] = useTheme();
 
   // the tab strip scrolls sideways: keep the current tab in view
@@ -324,9 +327,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               setChatOpen(true);
             }}
           />
+          <MenuRow
+            icon={<Smartphone size={19} className="text-pink-600" />}
+            label="תוכנית היום על מסך הנעילה"
+            onClick={() => {
+              setMenuOpen(false);
+              setWallpaperOpen(true);
+            }}
+          />
           <MenuRow icon={<LogOut size={19} />} label="יציאה" onClick={logout} />
         </div>
       </Sheet>
+      {wallpaperOpen && <WallpaperSheet open onClose={() => setWallpaperOpen(false)} />}
 
       <Modal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} title="משימה חדשה">
         <QuickAdd autoFocus spaceId={currentSpace?.id} onAdded={() => setQuickAddOpen(false)} />
