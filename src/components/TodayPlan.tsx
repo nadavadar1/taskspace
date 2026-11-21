@@ -30,17 +30,20 @@ export function TodayPlan({
   spaceById,
   multi,
   onPlan,
+  part,
 }: {
   plan: DayPlan;
   spaceById: Map<number, Space>;
   multi: boolean;
   /** opens the one-minute morning plan */
   onPlan: () => void;
+  /** on a phone only one half shows: today, or the general list (everything not for today); a desktop shows both */
+  part: "today" | "general";
 }) {
   const { today, patchTask, toast, openPaste, openNewTask } = useData();
   const nowHM = useNowHM();
-  const row = (t: Task, clock = false) => (
-    <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace={multi} clock={clock} />
+  const row = (t: Task, clock = false, toToday = false) => (
+    <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace={multi} clock={clock} toToday={toToday} />
   );
 
   /** move many at once; "ביטול" puts every old date back */
@@ -59,6 +62,7 @@ export function TodayPlan({
 
   return (
     <div className="space-y-3 sm:space-y-4">
+      <div className={cn("space-y-3 sm:space-y-4", part !== "today" && "hidden sm:block")}>
       <DayNote />
 
       {plan.overdue.length > 0 && (
@@ -157,11 +161,20 @@ export function TodayPlan({
       )}
 
       {plan.done.length > 0 && <DoneToday tasks={plan.done} />}
+      </div>
 
-      <Horizon title="מחר" tasks={plan.tomorrow} render={(t) => row(t)} defaultOpen />
-      <Horizon title="עד סוף השבוע" tasks={plan.week} render={(t) => row(t)} />
-      <Horizon title="בהמשך" tasks={plan.later} render={(t) => row(t)} />
-      <Horizon title="מתי שיהיה (בלי תאריך)" tasks={plan.someday} render={(t) => row(t)} />
+      {/* the general list; remounted per tab so the phone's "כללי" opens with every group unfolded */}
+      <div key={part} className={cn("space-y-3 sm:space-y-4", part !== "general" && "hidden sm:block")} data-general>
+        {plan.tomorrow.length + plan.week.length + plan.later.length + plan.someday.length === 0 && (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-surface py-8 text-center text-sm text-muted sm:hidden">
+            אין משימות כלליות. הכול להיום
+          </p>
+        )}
+        <Horizon title="מחר" tasks={plan.tomorrow} render={(t) => row(t, false, true)} defaultOpen />
+        <Horizon title="עד סוף השבוע" tasks={plan.week} render={(t) => row(t, false, true)} defaultOpen={part === "general"} />
+        <Horizon title="בהמשך" tasks={plan.later} render={(t) => row(t, false, true)} defaultOpen={part === "general"} />
+        <Horizon title="מתי שיהיה (בלי תאריך)" tasks={plan.someday} render={(t) => row(t, false, true)} defaultOpen={part === "general"} />
+      </div>
     </div>
   );
 }

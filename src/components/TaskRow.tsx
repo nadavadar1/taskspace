@@ -92,6 +92,7 @@ export function TaskRow({
   showSpace,
   showPriority,
   clock,
+  toToday,
 }: {
   task: Task;
   space?: Space;
@@ -99,8 +100,10 @@ export function TaskRow({
   showPriority?: boolean;
   /** in the day plan: the time stands out on the side and the (known) date is left out */
   clock?: boolean;
+  /** a one-tap "להיום" for tasks in the general list */
+  toToday?: boolean;
 }) {
-  const { today, openTask, patchTask, deleteWithUndo, openActions } = useData();
+  const { today, openTask, patchTask, deleteWithUndo, openActions, toast } = useData();
   const p = PRIORITY_MAP[task.priority];
   const closed = isClosed(task.status);
   const covered = useCovered(task);
@@ -167,6 +170,21 @@ export function TaskRow({
       </span>
       {clock && task.due_time && (
         <span className={cn("shrink-0 text-sm font-bold tabular-nums", closed ? "text-slate-300" : "text-primary")}>{task.due_time}</span>
+      )}
+      {toToday && !closed && task.due_date !== today && (
+        <button
+          type="button"
+          data-no-swipe
+          onClick={(e) => {
+            e.stopPropagation();
+            const was = task.due_date;
+            void patchTask(task.id, { due_date: today });
+            toast("עברה להיום", { action: { label: "ביטול", run: () => void patchTask(task.id, { due_date: was }) } });
+          }}
+          className="shrink-0 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary active:scale-95"
+        >
+          להיום
+        </button>
       )}
       <DeleteX taskId={task.id} title={task.title} />
     </div>

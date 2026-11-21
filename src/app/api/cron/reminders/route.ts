@@ -21,10 +21,16 @@ async function run(req: Request): Promise<Response> {
   if (!authorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  // The poller calls every minute, but touching the database that often keeps the free Neon compute
+  // awake 24/7 and burns the monthly quota (it ran out on 21.11.2026). So only every 15th minute does
+  // any work; reminders and timed-task nudges look a quarter-hour ahead to make up for it.
+  if (new Date().getUTCMinutes() % 15 !== 0 && !new URL(req.url).searchParams.has("now")) {
+    return NextResponse.json({ skipped: "off-minute" });
+  }
   try {
     // Claims (and advances/disables) every due reminder atomically, so only the caller that
     // actually claimed a reminder goes on to push-notify for it.
-    const due = await claimDueReminders();
+    const due = await claimDueReminders(new Date(Date.now() + 14 * 60_000)); // a little early beats 15 minutes late
     let sent = 0;
     for (const reminder of due) {
       let body: string | undefined;
@@ -45,7 +51,7 @@ async function run(req: Request): Promise<Response> {
       sent += result.sent;
     }
     // a task with a time pushes a few minutes before it, without having to set a reminder by hand
-    const nudges = await claimTimedNudges();
+    const nudges = await claimTimedNudges(15);
     for (const t of nudges) {
       const result = await broadcastPush({
         title: `⏰ ${t.due_time} · ${t.title}`,
