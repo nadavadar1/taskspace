@@ -27,7 +27,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
   const [text, setText] = useState(initial);
   const spaceIds = useMemo(() => spaces.map((s) => String(s.id)), [spaces]);
   const [spaceKey, setSpaceKey] = useLocalChoice<string>("quick-add-space", spaceIds[0] ?? "", spaceIds);
-  const [day, setDay] = useLocalChoice<DefaultDay>("paste-default-day", "today", DAYS);
+  const [day, setDay] = useLocalChoice<DefaultDay>("paste-default-day-v2", "none", DAYS);
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const fallbackSpace = Number(spaceKey) || spaces[0]?.id;
@@ -39,7 +39,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
         const p = parseQuickTask(line.title, { today, spaces });
         return {
           ...p,
-          description: line.description,
+          description: [line.description, p.note].filter(Boolean).join("\n"),
           due_date: p.due_date ?? fallbackDate,
           space_id: p.space_id ?? fallbackSpace,
         };
@@ -60,6 +60,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
         priority: t.priority ?? "medium",
         due_date: t.due_date,
         due_time: t.due_time,
+        end_time: t.end_time,
         recurrence: t.recurrence,
         recurrence_n: t.recurrence_n,
       });

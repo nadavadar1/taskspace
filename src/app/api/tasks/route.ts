@@ -14,6 +14,7 @@ export const POST = guarded(async (req) => {
     status: typeof body.status === "string" ? body.status : undefined,
     due_date: typeof body.due_date === "string" ? body.due_date : null,
     due_time: typeof body.due_time === "string" ? body.due_time : null,
+    end_time: typeof body.end_time === "string" ? body.end_time : null,
     status_note: typeof body.status_note === "string" ? body.status_note : undefined,
     checklist: Array.isArray(body.checklist) ? body.checklist : undefined,
     recurrence: typeof body.recurrence === "string" ? body.recurrence : undefined,

@@ -28,6 +28,8 @@ export interface Task {
   status: Status;
   due_date: string | null; // YYYY-MM-DD
   due_time: string | null; // HH:MM, Israel time
+  /** When it ends (HH:MM), for things that take a slot: a meeting 14:00-16:00. */
+  end_time: string | null;
   /** Why the task wasn't done / can't be done. Only meaningful (and required) when status is "not_done". */
   status_note: string;
   /** Small steps, in order. */

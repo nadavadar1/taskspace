@@ -7,7 +7,7 @@ import type { ChecklistItem, Priority, Recurrence, Settings, Space, Status, Task
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
   to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
-  status_note, checklist, recurrence, recurrence_n, is_event, position, created_at, completed_at`;
+  to_char(end_time, 'HH24:MI') as end_time, status_note, checklist, recurrence, recurrence_n, is_event, position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -19,6 +19,7 @@ function mapTask(r: Record<string, unknown>): Task {
     status: r.status as Status,
     due_date: (r.due_date as string | null) ?? null,
     due_time: (r.due_time as string | null) ?? null,
+    end_time: (r.end_time as string | null) ?? null,
     status_note: (r.status_note as string | null) ?? "",
     checklist: sanitizeChecklist(r.checklist),
     recurrence: isRecurrence(r.recurrence) ? r.recurrence : "none",
@@ -115,6 +116,7 @@ export interface TaskInput {
   status?: string;
   due_date?: string | null;
   due_time?: string | null;
+  end_time?: string | null;
   status_note?: string;
   checklist?: unknown;
   recurrence?: string;
@@ -142,6 +144,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   // a recurring task always has a due date: the next copy is counted from it
   const due = isISO(input.due_date) ? input.due_date : rec.recurrence !== "none" ? todayISO() : null;
   const dueTime = due && isHHMM(input.due_time) ? input.due_time : null;
+  const endTime = dueTime && isHHMM(input.end_time) ? input.end_time : null;
   const description = String(input.description ?? "").slice(0, 4000);
   const note = status === "not_done" ? String(input.status_note ?? "").trim().slice(0, 1000) : "";
   const checklist = sanitizeChecklist(input.checklist ?? []);
@@ -152,8 +155,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
   }
   const rows = await db.unsafe(
     `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note,
-                           checklist, recurrence, recurrence_n, is_event, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13, ${status === "done" ? "now()" : "null"})
+                           checklist, recurrence, recurrence_n, is_event, end_time, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
     [
       input.space_id,
@@ -169,6 +172,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
       rec.recurrence,
       rec.recurrence_n,
       input.is_event === true,
+      endTime,
     ] as never[],
   );
   return mapTask(rows[0]);
@@ -182,6 +186,7 @@ export interface TaskPatch {
   status?: string;
   due_date?: string | null;
   due_time?: string | null;
+  end_time?: string | null;
   status_note?: string;
   checklist?: unknown;
   recurrence?: string;
@@ -250,9 +255,14 @@ export async function updateTaskFull(id: number, patch: TaskPatch): Promise<{ ta
   if (patch.due_date === null || isISO(patch.due_date)) {
     if (patch.due_date !== undefined) push("due_date", patch.due_date);
     if (patch.due_date === null) push("due_time", null); // no date means no time either
+    if (patch.due_date === null) push("end_time", null);
   }
   if (patch.due_time === null || isHHMM(patch.due_time)) {
     if (patch.due_time !== undefined && patch.due_date !== null) push("due_time", patch.due_time);
+    if (patch.due_time === null && patch.due_date !== null) push("end_time", null);
+  }
+  if ((patch.end_time === null || isHHMM(patch.end_time)) && patch.due_date !== null && patch.due_time !== null) {
+    push("end_time", patch.end_time);
   }
   if (typeof patch.space_id === "number") push("space_id", patch.space_id);
   if (typeof patch.position === "number" && Number.isFinite(patch.position)) push("position", patch.position);
@@ -304,6 +314,7 @@ async function spawnNext(done: Task, reminder: ReminderSnapshot | null): Promise
     status: "new",
     due_date: nextDue,
     due_time: done.due_time,
+    end_time: done.end_time,
     checklist: done.checklist.map((i: ChecklistItem) => ({ ...i, done: false })),
     recurrence: done.recurrence,
     recurrence_n: done.recurrence_n,
