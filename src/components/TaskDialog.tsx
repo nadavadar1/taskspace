@@ -51,6 +51,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [statusNote, setStatusNote] = useState(editing?.status_note ?? "");
   const [due, setDue] = useState<string>(editing ? (editing.due_date ?? "") : (defaults.due_date ?? ""));
   const [dueTime, setDueTime] = useState<string>(editing ? (editing.due_time ?? "") : (defaults.due_time ?? ""));
+  const [endTime, setEndTime] = useState<string>(editing ? (editing.end_time ?? "") : (defaults.end_time ?? ""));
   const [spaceId, setSpaceId] = useState<number | undefined>(
     editing?.space_id ?? defaults.space_id ?? spaces[0]?.id,
   );
@@ -162,6 +163,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         ...extra,
         due_date: dueDate || null,
         due_time: dueDate && dueTime ? dueTime : null,
+        end_time: dueDate && dueTime && endTime > dueTime ? endTime : null,
         space_id: spaceId,
       });
     } else if (taskId === null) {
@@ -175,6 +177,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         ...extra,
         due_date: dueDate || null,
         due_time: dueDate && dueTime ? dueTime : null,
+        end_time: dueDate && dueTime && endTime > dueTime ? endTime : null,
       });
       taskId = created?.id ?? null;
       createdId.current = taskId;
@@ -376,6 +379,19 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 aria-label="שעה"
               />
             </div>
+            {due && dueTime && (
+              <label className="mt-2 flex items-center gap-2 text-sm text-muted">
+                עד
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-28 rounded-xl border border-line px-2 py-1.5 text-ink outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+                  aria-label="שעת סיום"
+                />
+                <span className="text-xs">(לא חובה)</span>
+              </label>
+            )}
             <div className="mt-2 flex flex-wrap gap-1.5">
               {quickDates.map((q) => (
                 <button

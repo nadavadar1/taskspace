@@ -10,6 +10,10 @@ export interface QuickParse {
   title: string;
   due_date: string | null;
   due_time: string | null;
+  /** "14-16" / "20:00-21:30": when it ends */
+  end_time: string | null;
+  /** what came after "נדרש / צריך ל...": the note, e.g. "להכין מצגת סיכום שנה" */
+  note: string;
   priority: Priority | null;
   space_id: number | null;
   recurrence: Recurrence;
@@ -53,6 +57,8 @@ export function parseQuickTask(input: string, opts: { today: string; spaces: Spa
     title: "",
     due_date: null,
     due_time: null,
+    end_time: null,
+    note: "",
     priority: null,
     space_id: null,
     recurrence: "none",
@@ -117,8 +123,28 @@ export function parseQuickTask(input: string, opts: { today: string; spaces: Spa
     out.recurrence = "monthly";
   }
 
+  // ---- a slot: "ב11-12", "בשעה 14 - 16", "20-21:30", "בין 14 ל-16", "מ-9 עד 11".
+  // Bare "3-4" without ב/בשעה/בין/מ and without minutes is left alone ("3-4 פרקים").
+  const H = "([01]?\\d|2[0-3])";
+  const range = take(
+    `${S}(בשעה\\s+|בשעות\\s+|ב-?|מ-?|בין\\s+(?:ה-?)?)?${H}(?::([0-5]\\d))?(?:\\s*[-–]\\s*|\\s+(?:עד|ועד)\\s+(?:ה-?)?|\\s+ל-?)${H}(?::([0-5]\\d))?${E}`,
+    (x) => {
+      const from = Number(x[3]) * 60 + Number(x[4] ?? 0);
+      const to = Number(x[5]) * 60 + Number(x[6] ?? 0);
+      return (!!x[2] || !!x[4] || !!x[6]) && to > from;
+    },
+  );
+  if (range) {
+    // "ב2-4" means the afternoon: nobody books a slot at 02:00
+    const pm = !range[4] && Number(range[3]) >= 1 && Number(range[3]) <= 6 && Number(range[5]) <= 12 ? 12 : 0;
+    out.due_time = `${pad(Number(range[3]) + pm)}:${range[4] ?? "00"}`;
+    out.end_time = `${pad(Number(range[5]) + pm)}:${range[6] ?? "00"}`;
+  }
+
   // ---- time: 18:00, ב-18:00, בשעה 9, בשעה 9:30
-  if ((m = take(`${S}(?:בשעה\\s+|ב-?|ב\\s)?([01]?\\d|2[0-3]):([0-5]\\d)${E}`))) {
+  if (out.due_time) {
+    // already set by the slot above
+  } else if ((m = take(`${S}(?:בשעה\\s+|ב-?|ב\\s)?([01]?\\d|2[0-3]):([0-5]\\d)${E}`))) {
     out.due_time = `${pad(Number(m[2]))}:${m[3]}`;
   } else if ((m = take(`${S}בשעה\\s+([01]?\\d|2[0-3])${E}`))) {
     out.due_time = `${pad(Number(m[2]))}:00`;
@@ -137,6 +163,7 @@ export function parseQuickTask(input: string, opts: { today: string; spaces: Spa
     else if (take(`${S}(?:ב|תוך\\s+)?עוד\\s+שבוע${E}`) || take(`${S}(?:ב|ל)?שבוע\\s+הבא${E}`)) out.due_date = addDays(today, 7);
     else if (take(`${S}(?:ב|ל|עד\\s+)?סוף\\s+השבוע${E}`)) out.due_date = nextWeekday(today, 5, true);
     else if ((m = take(`${S}(?:ב|ל|עד\\s+)?יום\\s+(${dayAlt})(?:\\s+הבא)?${E}`))) out.due_date = nextWeekday(today, DAYS.indexOf(m[2]));
+    else if ((m = take(`${S}(?:ב|ל|עד\\s+ה?)(${dayAlt})(?:\\s+הבא)?${E}`))) out.due_date = nextWeekday(today, DAYS.indexOf(m[2]));
     else if (take(`${S}(?:ב|ל|עד\\s+)שבת${E}`)) out.due_date = nextWeekday(today, 6);
   }
 
@@ -150,6 +177,13 @@ export function parseQuickTask(input: string, opts: { today: string; spaces: Spa
   if (out.recurrence !== "none" && !out.due_date) out.due_date = today;
   // a time with no date means today
   if (out.due_time && !out.due_date) out.due_date = today;
+
+  // "דיון ... נדרש להכין מצגת": the part from "נדרש / צריך" on is a note, not the title
+  const cut = s.match(/(?:^|[\s,.])(?:ו?נדרש|ו?צריך|ו?חייב|לזכור|הערה:)\s/);
+  if (cut?.index !== undefined && cut.index > 1) {
+    out.note = s.slice(cut.index).replace(/^[\s,.]+/, "").replace(/\s+/g, " ").trim();
+    s = s.slice(0, cut.index);
+  }
 
   out.title = s
     .replace(/\s+/g, " ")

@@ -45,7 +45,7 @@ export function EventRow({ task, space, showSpace }: { task: Task; space?: Space
               אירוע ביומן
             </span>
             {task.due_date && <span className="font-bold text-slate-600">{eventCountdown(task.due_date, today)}</span>}
-            {task.due_time && <span>{task.due_time}</span>}
+            {task.due_time && <span>{task.due_time}{task.end_time ? ` עד ${task.end_time}` : ""}</span>}
             {showSpace && sp && (
               <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sp.color }} />

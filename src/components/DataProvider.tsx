@@ -10,6 +10,7 @@ export interface NewTaskDefaults {
   space_id?: number;
   due_date?: string | null;
   due_time?: string | null;
+  end_time?: string | null;
   status?: Status;
   priority?: Priority;
   title?: string;
@@ -55,6 +56,7 @@ interface DataCtx {
       description?: string;
       status_note?: string;
       checklist?: ChecklistItem[];
+      is_event?: boolean;
     },
   ) => Promise<Task | null>;
   patchTask: (id: number, patch: Partial<Task>) => Promise<void>;

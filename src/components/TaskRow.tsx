@@ -169,7 +169,10 @@ export function TaskRow({
         </span>
       </span>
       {clock && task.due_time && (
-        <span className={cn("shrink-0 text-sm font-bold tabular-nums", closed ? "text-slate-300" : "text-primary")}>{task.due_time}</span>
+        <span className={cn("shrink-0 text-sm font-bold tabular-nums", closed ? "text-slate-300" : "text-primary")}>
+          {task.due_time}
+          {task.end_time && <span className="block text-[11px] font-medium opacity-70">עד {task.end_time}</span>}
+        </span>
       )}
       {toToday && !closed && task.due_date !== today && (
         <button
