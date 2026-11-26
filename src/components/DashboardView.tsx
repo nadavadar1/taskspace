@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { CalendarDays, Check, Flag, Layers, Play, Plus, Sparkles, Target } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Flag, Layers, Play, Plus, Sparkles, Target } from "lucide-react";
 import { useData } from "./DataProvider";
 import { CalendarView } from "./CalendarView";
 import { TaskRow } from "./TaskRow";
@@ -234,6 +234,11 @@ export function DashboardView() {
             <Stat value={doneThisWeek} label="נסגרו השבוע" tone={doneThisWeek ? "good" : undefined} />
           </div>
 
+          {/* phone: every category at a glance, so tasks without a date for today aren't forgotten */}
+          <div className={cn("sm:hidden", phoneTab !== "today" && "hidden")}>
+            <CategoryBoard spaces={shownSpaces} open={open} scoped={scoped} today={today} weekStart={weekStart} />
+          </div>
+
           {/* my day */}
           <div className="mb-8 max-w-3xl">
             <TodayPlan plan={plan} spaceById={spaceById} multi={shownSpaces.length > 1} onPlan={() => setRitualOpen(true)} part={phoneTab} />
@@ -445,6 +450,80 @@ function PhoneTabButton({
         </span>
       )}
     </button>
+  );
+}
+
+/**
+ * One line per space: a weekly progress bar (closed this week vs still open) and, on tap, the open tasks that are
+ * not on today's list, each with "להיום". A space with nothing open gets a trophy.
+ */
+function CategoryBoard({
+  spaces,
+  open,
+  scoped,
+  today,
+  weekStart,
+}: {
+  spaces: Space[];
+  open: Task[];
+  scoped: Task[];
+  today: string;
+  weekStart: string;
+}) {
+  const [expanded, setExpanded] = useLocalChoice<string>("category-board-open", "", ["", ...spaces.map((s) => String(s.id))]);
+  const rows = spaces.map((s) => {
+    const mine = open.filter((t) => t.space_id === s.id);
+    // overdue and today's are already in the day plan; waiting ones can't be done now
+    const more = mine.filter((t) => (!t.due_date || t.due_date > today) && t.status !== "on_hold").sort(byImportance);
+    const done = scoped.filter(
+      (t) => t.space_id === s.id && t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
+    ).length;
+    return { s, more, left: mine.length, done };
+  });
+  const doneWeek = rows.reduce((n, r) => n + r.done, 0);
+  if (!spaces.length) return null;
+  return (
+    <section className="mb-4 overflow-hidden rounded-2xl border border-line bg-surface shadow-soft" data-board>
+      <header className="flex items-center justify-between gap-2 px-4 pb-1 pt-3">
+        <h2 className="font-bold">כל המשימות לפי קטגוריה</h2>
+        {doneWeek > 0 && <span className="text-xs font-bold text-emerald-600">השבוע סגרת {doneWeek} ⭐</span>}
+      </header>
+      <p className="px-4 pb-2 text-xs text-muted">גם מה שלא מופיע בהיום. אפשר לסגור או להעביר להיום.</p>
+      {rows.map(({ s, more, left, done }) => {
+        const isOpen = expanded === String(s.id);
+        const pct = done + left ? Math.round((done / (done + left)) * 100) : 100;
+        return (
+          <div key={s.id} className="border-t border-line">
+            <button
+              onClick={() => setExpanded(isOpen ? "" : String(s.id))}
+              className="flex w-full items-center gap-3 px-4 py-3 text-start"
+              aria-expanded={isOpen}
+            >
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-bold">{s.name}</span>
+                  <span className="text-xs font-bold text-muted">
+                    {left === 0 ? "הכול סגור 🏆" : more.length ? `עוד ${more.length} שלא להיום` : `${left} בהיום`}
+                  </span>
+                </span>
+                <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <span className="block h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: s.color }} />
+                </span>
+              </span>
+              {more.length > 0 && <ChevronDown size={17} className={cn("shrink-0 text-muted transition", isOpen && "rotate-180")} />}
+            </button>
+            {isOpen && more.length > 0 && (
+              <div className="px-1.5 pb-2">
+                {more.map((t) => (
+                  <TaskRow key={t.id} task={t} showPriority toToday />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
