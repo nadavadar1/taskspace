@@ -29,12 +29,12 @@ export function CalendarPage() {
           <p className="text-sm text-muted">כל המרחבים ביחד, כל אחד בצבע שלו</p>
         </div>
         <button
-          onClick={() => openNewTask()}
+          onClick={() => openNewTask({ is_event: true })}
           disabled={!spaces.length}
           className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-600 disabled:opacity-50"
         >
           <Plus size={16} />
-          משימה חדשה
+          אירוע חדש
         </button>
       </div>
 

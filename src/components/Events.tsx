@@ -4,7 +4,7 @@ import { CalendarDays, X } from "lucide-react";
 import { useData } from "./DataProvider";
 import { Swipeable } from "./Swipe";
 import { cn } from "./ui";
-import { HE_MONTHS, diffDays, formatLong, parts } from "@/lib/dates";
+import { HE_DAYS, HE_MONTHS, addDays, dayOfWeek, diffDays, formatLong, parts } from "@/lib/dates";
 import type { Space, Task } from "@/lib/types";
 
 /** "היום" / "מחר" / "בעוד 12 ימים" / "לפני 3 ימים". */
@@ -106,6 +106,80 @@ export function UpcomingEvents({ events, spaceById, limit = 4 }: { events: Task[
         {events.slice(0, limit).map((t) => (
           <EventRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace={spaceById.size > 1} />
         ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * "השבוע": seven day cards side by side (today first), each with its events and dated tasks,
+ * so nothing coming up this week is missed. Sideways scroll on a phone.
+ */
+export function WeekStrip({ items, spaceById }: { items: Task[]; spaceById: Map<number, Space> }) {
+  const { today, openTask } = useData();
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const byDay = (d: string) =>
+    items
+      .filter((t) => t.due_date === d)
+      .sort((a, b) => Number(b.is_event) - Number(a.is_event) || (a.due_time ?? "99").localeCompare(b.due_time ?? "99"));
+  const events = items.filter((t) => t.is_event).length;
+  return (
+    <section className="mb-5" aria-label="השבוע" data-week>
+      <header className="mb-2 flex items-baseline gap-2 px-1">
+        <h2 className="text-base font-bold">📅 השבוע</h2>
+        <span className="text-xs font-medium text-muted">
+          {events ? `${events} אירועים · ` : ""}
+          {items.length - events} משימות עם תאריך
+        </span>
+      </header>
+      <div className="scroll-thin -mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-7 sm:overflow-visible sm:px-0">
+        {days.map((d, i) => {
+          const list = byDay(d);
+          return (
+            <div
+              key={d}
+              className={cn(
+                "flex w-[8.75rem] shrink-0 snap-start flex-col rounded-2xl border bg-surface p-2.5 shadow-soft sm:w-auto",
+                i === 0 ? "border-primary ring-2 ring-indigo-100" : "border-line",
+              )}
+            >
+              <div className="mb-1.5 flex items-baseline justify-between gap-1">
+                <span className={cn("text-sm font-bold", i === 0 && "text-primary")}>
+                  {i === 0 ? "היום" : i === 1 ? "מחר" : HE_DAYS[dayOfWeek(d)]}
+                </span>
+                <span className="text-[11px] font-bold text-muted">
+                  {parts(d).d}.{parts(d).m}
+                </span>
+              </div>
+              {list.length === 0 ? (
+                <span className="py-2 text-xs text-slate-400">פנוי ✨</span>
+              ) : (
+                <ul className="space-y-1">
+                  {list.slice(0, 4).map((t) => {
+                    const color = spaceById.get(t.space_id)?.color ?? "#6366f1";
+                    return (
+                      <li key={t.id}>
+                        <button
+                          type="button"
+                          onClick={() => openTask(t.id)}
+                          className={cn(
+                            "w-full rounded-lg px-1.5 py-1 text-start text-xs leading-snug transition active:scale-[0.98]",
+                            t.is_event ? "font-bold text-white" : "bg-slate-50 text-slate-700",
+                          )}
+                          style={t.is_event ? { backgroundColor: color } : { boxShadow: `inset -3px 0 0 ${color}` }}
+                        >
+                          {t.due_time && <span className={cn("me-1 font-bold", !t.is_event && "text-primary")}>{t.due_time}</span>}
+                          <span className="line-clamp-2">{t.title}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {list.length > 4 && <li className="px-1.5 text-[11px] font-bold text-muted">ועוד {list.length - 4}</li>}
+                </ul>
+              )}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

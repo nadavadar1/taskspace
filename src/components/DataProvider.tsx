@@ -16,6 +16,8 @@ export interface NewTaskDefaults {
   title?: string;
   recurrence?: Recurrence;
   recurrence_n?: number | null;
+  /** open the dialog on "אירוע" (from the calendar) */
+  is_event?: boolean;
 }
 
 type TaskDialogState = { mode: "edit"; id: number } | { mode: "new"; defaults: NewTaskDefaults } | null;

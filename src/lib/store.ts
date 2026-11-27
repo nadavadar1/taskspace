@@ -450,6 +450,29 @@ export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "t
   }));
 }
 
+/**
+ * Timed tasks whose time passed 10 to 70 minutes ago and are still open: the "בוצע?" push, once per task and time.
+ * shortcut: the window does not cross midnight, so a 23:55 task is never asked about; fine for now.
+ */
+export async function claimTimedCheckins(): Promise<Pick<Task, "id" | "title" | "due_time">[]> {
+  await ensureSchema();
+  const now = utcToZoned(new Date().toISOString());
+  const rows = await sql().unsafe(
+    `update ts_tasks t set asked_for = $1::text || ' ' || to_char(t.due_time, 'HH24:MI')
+     where t.due_date = $1::date and t.due_time is not null
+       and t.due_time <= $2::time - interval '10 minutes'
+       and t.due_time > $2::time - interval '70 minutes'
+       and $2::time >= '01:10'::time
+       and t.status not in ('done', 'not_done') and not t.is_event
+       and t.asked_for is distinct from ($1::text || ' ' || to_char(t.due_time, 'HH24:MI'))
+     returning t.id, t.title, to_char(t.due_time, 'HH24:MI') as due_time`,
+    [now.date, now.time],
+  );
+  return rows
+    .map((r) => ({ id: r.id as number, title: r.title as string, due_time: r.due_time as string }))
+    .sort((a, b) => a.due_time.localeCompare(b.due_time));
+}
+
 /* ----------------------------- lock-screen wallpaper key ----------------------------- */
 
 /**

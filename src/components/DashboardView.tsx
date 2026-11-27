@@ -12,13 +12,13 @@ import { ChecklistProgressBar } from "./Checklist";
 import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
 import { completionStreak, focusQueue } from "@/lib/focus";
 import { GestureTip } from "./GestureTip";
-import { UpcomingEvents } from "./Events";
+import { UpcomingEvents, WeekStrip } from "./Events";
 import { CoveredGroup } from "./Recurring";
 import { TodayPlan, useNowHM } from "./TodayPlan";
 import { MorningRitual, useMorningRitual } from "./MorningRitual";
 import { planDay } from "@/lib/day-plan";
 import { PRIORITIES, PRIORITY_MAP } from "@/lib/constants";
-import { formatLong, startOfWeek, todayISO } from "@/lib/dates";
+import { addDays, formatLong, startOfWeek, todayISO } from "@/lib/dates";
 import type { Priority, Space, Task } from "@/lib/types";
 
 type Grouping = "space" | "priority";
@@ -79,6 +79,11 @@ export function DashboardView() {
         .sort((a, b) => `${a.due_date} ${a.due_time ?? ""}`.localeCompare(`${b.due_date} ${b.due_time ?? ""}`)),
     [scoped, today],
   );
+
+  const weekItems = useMemo(() => {
+    const end = addDays(today, 6);
+    return scoped.filter((t) => t.due_date && t.due_date >= today && t.due_date <= end && (t.is_event || isTodo(t)));
+  }, [scoped, today, isTodo]);
 
   const nowHM = useNowHM();
   const [ritualOpen, setRitualOpen] = useMorningRitual();
@@ -187,6 +192,11 @@ export function DashboardView() {
 
           <div className="mb-6 hidden sm:block">
             <QuickAdd />
+          </div>
+
+          {/* the week ahead: events and dated tasks per day, so nothing coming up is missed */}
+          <div className={cn(phoneTab !== "today" && "hidden sm:block")}>
+            <WeekStrip items={weekItems} spaceById={spaceById} />
           </div>
 
           {/* space picker: one sideways-scrolling line on a phone */}
