@@ -14,6 +14,7 @@ import {
   Monitor,
   Moon,
   MoreHorizontal,
+  NotebookPen,
   Plus,
   Search,
   Smartphone,
@@ -188,6 +189,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </nav>
 
+          {/* one place to dump everything: it splits the message into tasks and files each in its space */}
+          <button
+            onClick={() => openPaste()}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-sm font-bold text-primary transition active:scale-95"
+            title="כותבים הכל בהודעה אחת, והיא מתחלקת למשימות במרחבים"
+          >
+            <NotebookPen size={16} />
+            לרשום
+          </button>
           <button
             onClick={() => setPaletteOpen(true)}
             className="hidden shrink-0 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-sm text-muted transition hover:border-slate-300 hover:text-ink sm:flex"
