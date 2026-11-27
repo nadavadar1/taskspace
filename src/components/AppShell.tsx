@@ -364,7 +364,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-line py-3 text-sm font-bold text-primary active:bg-slate-50"
         >
           <ClipboardList size={17} />
-          הרבה משימות? הדבקת רשימה או הכתבה
+          הרבה משימות? הכל בהודעה אחת
         </button>
       </Modal>
       <PasteTasks />

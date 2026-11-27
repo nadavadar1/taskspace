@@ -5,13 +5,13 @@ import { CalendarDays, Check, Clock, Mic } from "lucide-react";
 import { useData } from "./DataProvider";
 import { Modal, cn, useLocalChoice } from "./ui";
 import { addDays, relativeLabel } from "@/lib/dates";
-import { splitPaste } from "@/lib/day-plan";
+import { sortMessage } from "@/lib/sort-message";
 import { parseQuickTask } from "@/lib/quick-parse";
 
 /**
- * Paste a whole list (e.g. from a chat) or dictate with the keyboard's microphone: every line or sentence
- * becomes a task, with its date / time / #space understood in the browser (free, no AI). A preview with
- * ticks comes first, so nothing is added by surprise.
+ * Paste a whole list, write one long message, or dictate with the keyboard's microphone: every line,
+ * sentence or " / " part becomes a task, filed in the space it most likely belongs to, with its date / time
+ * understood in the browser (free, no AI). A preview with ticks and a space picker comes first.
  */
 export function PasteTasks() {
   const { pasteText, closePaste } = useData();
@@ -23,28 +23,29 @@ type DefaultDay = "today" | "tomorrow" | "none";
 const DAYS: readonly DefaultDay[] = ["today", "tomorrow", "none"];
 
 function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void }) {
-  const { spaces, today, addTask, toast } = useData();
+  const { spaces, tasks, today, addTask, toast } = useData();
   const [text, setText] = useState(initial);
   const spaceIds = useMemo(() => spaces.map((s) => String(s.id)), [spaces]);
   const [spaceKey, setSpaceKey] = useLocalChoice<string>("quick-add-space", spaceIds[0] ?? "", spaceIds);
   const [day, setDay] = useLocalChoice<DefaultDay>("paste-default-day-v2", "none", DAYS);
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
+  const [moved, setMoved] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
   const fallbackSpace = Number(spaceKey) || spaces[0]?.id;
   const fallbackDate = day === "today" ? today : day === "tomorrow" ? addDays(today, 1) : null;
 
   const items = useMemo(
     () =>
-      splitPaste(text).map((line) => {
+      sortMessage(text, spaces, tasks).map((line, i) => {
         const p = parseQuickTask(line.title, { today, spaces });
         return {
           ...p,
           description: [line.description, p.note].filter(Boolean).join("\n"),
           due_date: p.due_date ?? fallbackDate,
-          space_id: p.space_id ?? fallbackSpace,
+          space_id: moved[i] ?? p.space_id ?? line.space_id ?? fallbackSpace,
         };
       }),
-    [text, today, spaces, fallbackDate, fallbackSpace],
+    [text, today, spaces, tasks, moved, fallbackDate, fallbackSpace],
   );
   const chosen = items.filter((_, i) => !skipped.has(i));
 
@@ -75,7 +76,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
     <Modal
       open
       onClose={onClose}
-      title="הדבקת רשימה או הכתבה"
+      title="הכל בהודעה אחת"
       footer={
         <button
           onClick={() => void addAll()}
@@ -92,6 +93,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
         onChange={(e) => {
           setText(e.target.value);
           setSkipped(new Set());
+          setMoved({});
         }}
         rows={initial ? 4 : 6}
         placeholder={"שורה לכל משימה, למשל:\nלשלוח לאמא הודעה\nלקבוע פאדל ליום חמישי ב-20:00\nלשלם ארנונה מחר #בית"}
@@ -100,7 +102,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
       />
       <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
         <Mic size={13} className="shrink-0 text-primary" />
-        בנייד: לוחצים על המיקרופון במקלדת ומכתיבים. כל משפט הופך למשימה.
+        שורה, משפט או ״/״ הם משימה נפרדת, וכל אחת נכנסת לבד למרחב המתאים. בנייד אפשר גם להכתיב עם המיקרופון במקלדת.
       </p>
 
       <div className="mt-3 space-y-2">
@@ -118,7 +120,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
           ))}
         </Row>
         {spaces.length > 1 && (
-          <Row label="מרחב ←">
+          <Row label="כשלא ברור לאיזה מרחב ←">
             {spaces.map((s) => (
               <Chip key={s.id} on={fallbackSpace === s.id} color={s.color} onClick={() => setSpaceKey(String(s.id))}>
                 {s.name}
@@ -134,7 +136,7 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
             const off = skipped.has(i);
             const space = spaces.find((s) => s.id === t.space_id);
             return (
-              <li key={i}>
+              <li key={i} className="flex items-start">
                 <button
                   type="button"
                   onClick={() =>
@@ -160,12 +162,6 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
                     <span className={cn("block text-[15px] font-medium leading-snug", off && "line-through")}>{t.title}</span>
                     {t.description && <span className="mt-0.5 block text-[13px] leading-snug text-muted">{t.description}</span>}
                     <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-bold">
-                      {space && (
-                        <span className="inline-flex items-center gap-1 text-muted">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: space.color }} />
-                          {space.name}
-                        </span>
-                      )}
                       {t.due_date && (
                         <span className="inline-flex items-center gap-1 text-primary">
                           <CalendarDays size={12} />
@@ -181,12 +177,27 @@ function PasteSheet({ initial, onClose }: { initial: string; onClose: () => void
                     </span>
                   </span>
                 </button>
+                {spaces.length > 1 && (
+                  <select
+                    value={t.space_id}
+                    onChange={(e) => setMoved((m) => ({ ...m, [i]: Number(e.target.value) }))}
+                    aria-label={`מרחב של ${t.title}`}
+                    className={cn("me-2 mt-2 max-w-[7.5rem] shrink-0 rounded-full border-0 py-1 ps-2 pe-6 text-xs font-bold text-white", off && "opacity-45")}
+                    style={{ backgroundColor: space?.color ?? "var(--primary)" }}
+                  >
+                    {spaces.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </li>
             );
           })}
         </ul>
       )}
-      {items.length > 0 && <p className="mt-1.5 text-xs text-muted">לחיצה על משימה מוציאה אותה מהרשימה.</p>}
+      {items.length > 0 && <p className="mt-1.5 text-xs text-muted">לחיצה על משימה מוציאה אותה מהרשימה. לחיצה על המרחב שלה מעבירה אותה למרחב אחר.</p>}
     </Modal>
   );
 }
