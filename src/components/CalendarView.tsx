@@ -301,7 +301,7 @@ function MonthCalendar({ spaces }: { spaces: Space[] }) {
               colorOf={colorOf}
               bellOf={bellOf}
               onOpenTask={openTask}
-              onCreate={() => openNewTask({ ...newTaskSpace, due_date: iso })}
+              onCreate={() => openNewTask({ ...newTaskSpace, due_date: iso, is_event: true })}
               onMore={() => setDayList(iso)}
             />
           ))}
@@ -372,7 +372,7 @@ function MonthCalendar({ spaces }: { spaces: Space[] }) {
               onClick={() => {
                 const d = dayList;
                 setDayList(null);
-                openNewTask({ ...newTaskSpace, due_date: d });
+                openNewTask({ ...newTaskSpace, due_date: d, is_event: true });
               }}
               className="mt-3 w-full rounded-xl bg-primary py-2 text-sm font-medium text-white"
             >

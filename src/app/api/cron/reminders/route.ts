@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { claimDueReminders } from "@/lib/reminders";
 import { broadcastPush } from "@/lib/push";
-import { claimTimedNudges, getTask } from "@/lib/store";
+import { claimTimedCheckins, claimTimedNudges, getTask } from "@/lib/store";
 
 // Polled every minute by an external free cron service (cron-job.org). Vercel's own free-tier
 // cron only fires once a day, so this route is the real scheduler. It must not require a
@@ -61,7 +61,19 @@ async function run(req: Request): Promise<Response> {
       });
       sent += result.sent;
     }
-    return NextResponse.json({ checked: due.length, nudged: nudges.length, sent });
+    // and asks "בוצע?" a little after the time, one push for all of them
+    const asks = await claimTimedCheckins();
+    if (asks.length) {
+      const one = asks.length === 1;
+      const result = await broadcastPush({
+        title: one ? `👀 שים לב · ${asks[0].due_time}` : `👀 שים לב · ${asks.length} משימות`,
+        body: one ? `${asks[0].title}. בוצע?` : `${asks.map((a) => `${a.due_time} ${a.title}`).join(" · ").slice(0, 150)}. בוצעו?`,
+        url: "/",
+        tag: "checkin",
+      });
+      sent += result.sent;
+    }
+    return NextResponse.json({ checked: due.length, nudged: nudges.length, asked: asks.length, sent });
   } catch (e) {
     console.error("[cron/reminders]", e);
     return NextResponse.json({ error: "internal error" }, { status: 500 });

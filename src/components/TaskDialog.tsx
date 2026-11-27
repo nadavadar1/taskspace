@@ -59,7 +59,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [recurrence, setRecurrence] = useState<Recurrence>(editing?.recurrence ?? defaults.recurrence ?? "none");
   const [recurrenceN, setRecurrenceN] = useState<number>(editing?.recurrence_n ?? defaults.recurrence_n ?? 3);
   // an event (exam, meeting) is a calendar entry to prepare for, not something to tick off
-  const [isEvent, setIsEvent] = useState<boolean>(editing?.is_event ?? false);
+  const [isEvent, setIsEvent] = useState<boolean>(editing?.is_event ?? defaults.is_event ?? false);
   const coveredInfo = editing ? series.get(editing.id) : undefined;
   const [busy, setBusy] = useState(false);
 
@@ -242,7 +242,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
               className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-white transition hover:bg-indigo-600 disabled:opacity-60"
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
-              {editing ? "שמירה" : "יצירת משימה"}
+              {editing ? "שמירה" : isEvent ? "הוספה ליומן" : "יצירת משימה"}
             </button>
           </div>
         </div>
@@ -361,36 +361,63 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         </Field>
         )}
 
-        <div className="grid gap-5">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-5 [&>*]:min-w-0">
           <Field label={isEvent ? "תאריך ושעה" : "תאריך יעד"}>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={due}
-                onChange={(e) => changeDue(e.target.value)}
-                className="w-full rounded-xl border border-line px-3 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
-              />
+            <input
+              type="date"
+              value={due}
+              onChange={(e) => changeDue(e.target.value)}
+              className="w-full min-w-0 rounded-xl border border-line px-3 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
+              aria-label="תאריך"
+            />
+            {/* own row: next to the date, iPhone's wide date field pushed the time off the screen */}
+            <div className={cn("mt-2 flex items-center gap-2 text-sm text-muted", !due && "opacity-40")}>
+              משעה
               <input
                 type="time"
                 value={dueTime}
                 disabled={!due}
                 onChange={(e) => setDueTime(e.target.value)}
-                className="w-28 shrink-0 rounded-xl border border-line px-2 py-2 outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100 disabled:opacity-40"
+                className="min-w-0 flex-1 rounded-xl border border-line px-2 py-2 text-ink outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
                 aria-label="שעה"
+              />
+              עד
+              <input
+                type="time"
+                value={endTime}
+                disabled={!due || !dueTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="min-w-0 flex-1 rounded-xl border border-line px-2 py-2 text-ink outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100 disabled:opacity-40"
+                aria-label="שעת סיום"
               />
             </div>
             {due && dueTime && (
-              <label className="mt-2 flex items-center gap-2 text-sm text-muted">
-                עד
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-28 rounded-xl border border-line px-2 py-1.5 text-ink outline-none focus:border-primary focus:ring-4 focus:ring-indigo-100"
-                  aria-label="שעת סיום"
-                />
-                <span className="text-xs">(לא חובה)</span>
-              </label>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted">משך:</span>
+                {(
+                  [
+                    [30, "חצי שעה"],
+                    [60, "שעה"],
+                    [90, "שעה וחצי"],
+                    [120, "שעתיים"],
+                  ] as const
+                ).map(([m, label]) => {
+                  const end = addMinutes(dueTime, m);
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setEndTime(end)}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium transition",
+                        endTime === end ? "bg-primary text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             )}
             <div className="mt-2 flex flex-wrap gap-1.5">
               {quickDates.map((q) => (
@@ -605,4 +632,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   );
+}
+
+/** "14:00" + 90 → "15:30" (stays within the day). */
+function addMinutes(time: string, minutes: number): string {
+  const t = Math.min(Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + minutes, 23 * 60 + 59);
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }

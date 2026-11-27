@@ -32,6 +32,7 @@ import { CommandPalette } from "./CommandPalette";
 import { QuickAdd } from "./QuickAdd";
 import { TaskActionsSheet } from "./TaskActions";
 import { PasteTasks } from "./PasteTasks";
+import { CheckIn } from "./CheckIn";
 import { WallpaperSheet } from "./WallpaperSheet";
 import { CalendarSyncSheet } from "./CalendarSyncSheet";
 
@@ -378,6 +379,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </button>
       </Modal>
       <PasteTasks />
+      {!chatOpen && <CheckIn />}
 
       <ChatWidget />
       <TaskDialog />

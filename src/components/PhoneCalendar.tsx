@@ -161,13 +161,18 @@ export function PhoneCalendar({ spaces }: { spaces: Space[] }) {
             <span className="text-sm font-medium text-muted">{relativeLabel(selected, today).startsWith("באיחור") ? "" : `· ${relativeLabel(selected, today)}`}</span>
             {hasBell(selected) && <Bell size={14} className="text-amber-600" aria-label="יש תזכורת" />}
           </h3>
-          <button
-            onClick={() => openNewTask({ ...(spaces.length === 1 ? { space_id: spaces[0].id } : {}), due_date: selected })}
-            className="flex items-center gap-1 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary"
-          >
-            <Plus size={14} />
-            משימה ליום הזה
-          </button>
+          <div className="flex gap-1.5">
+            {([true, false] as const).map((ev) => (
+              <button
+                key={String(ev)}
+                onClick={() => openNewTask({ ...(spaces.length === 1 ? { space_id: spaces[0].id } : {}), due_date: selected, is_event: ev })}
+                className="flex items-center gap-1 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary"
+              >
+                <Plus size={14} />
+                {ev ? "אירוע" : "משימה"}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-1 shadow-soft">
           {dayTasks.length === 0 ? (
