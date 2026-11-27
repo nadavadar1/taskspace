@@ -109,7 +109,7 @@ export function TodayPlan({
             className="flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary active:scale-95"
           >
             <ClipboardList size={14} />
-            הדבקה / הכתבה
+            הודעה ארוכה
           </button>
         </header>
         {!hasToday ? (
