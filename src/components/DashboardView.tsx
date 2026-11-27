@@ -13,6 +13,7 @@ import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./u
 import { completionStreak, focusQueue } from "@/lib/focus";
 import { GestureTip } from "./GestureTip";
 import { UpcomingEvents, WeekStrip } from "./Events";
+import { RoutineCard, routinesNow } from "./RoutineCard";
 import { CoveredGroup } from "./Recurring";
 import { TodayPlan, useNowHM } from "./TodayPlan";
 import { MorningRitual, useMorningRitual } from "./MorningRitual";
@@ -87,12 +88,15 @@ export function DashboardView() {
 
   const nowHM = useNowHM();
   const [ritualOpen, setRitualOpen] = useMorningRitual();
+  // the routine for this hour sits in its own card at the top, so it is left out of the plan below
+  const routines = useMemo(() => routinesNow(open, today, nowHM), [open, today, nowHM]);
+  const planOpen = useMemo(() => open.filter((t) => !routines.includes(t)), [open, routines]);
   const plan = useMemo(() => {
     const doneToday = scoped.filter(
       (t) => !t.is_event && t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
     );
-    return planDay(open, doneToday, today, nowHM);
-  }, [open, scoped, today, nowHM]);
+    return planDay(planOpen, doneToday, today, nowHM);
+  }, [planOpen, scoped, today, nowHM]);
   const todayLeft = open.filter((t) => t.due_date === today).length;
 
   const weekStart = startOfWeek(today);
@@ -100,7 +104,7 @@ export function DashboardView() {
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
   // "now" follows the day's clock; with nothing for today, the usual focus order
-  const nextUp = useMemo(() => plan.now ?? focusQueue(open, today, series)[0], [plan.now, open, today, series]);
+  const nextUp = useMemo(() => plan.now ?? focusQueue(planOpen, today, series)[0], [plan.now, planOpen, today, series]);
   const closedToday = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
   ).length;
@@ -168,6 +172,10 @@ export function DashboardView() {
                 count={plan.tomorrow.length + plan.week.length + plan.later.length + plan.someday.length}
               />
             </div>
+          </div>
+
+          <div className={cn(phoneTab !== "today" && "hidden sm:block")}>
+            <RoutineCard routines={routines} />
           </div>
 
           {/* hero: the one next thing + today's progress */}
