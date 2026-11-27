@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ClipboardList, Hourglass, Moon, Pencil, Plus, Star, Sun, Trophy } from "lucide-react";
+import { ChevronDown, Hourglass, Moon, Pencil, Plus, Star, Sun, Trophy } from "lucide-react";
 import { useData } from "./DataProvider";
 import { TaskRow } from "./TaskRow";
 import { cn, useMounted } from "./ui";
@@ -40,7 +40,7 @@ export function TodayPlan({
   /** on a phone only one half shows: today, or the general list (everything not for today); a desktop shows both */
   part: "today" | "general";
 }) {
-  const { today, patchTask, toast, openPaste, openNewTask } = useData();
+  const { today, patchTask, toast, openNewTask } = useData();
   const nowHM = useNowHM();
   const row = (t: Task, clock = false, toToday = false) => (
     <TaskRow key={t.id} task={t} space={spaceById.get(t.space_id)} showSpace={multi} clock={clock} toToday={toToday} />
@@ -103,13 +103,6 @@ export function TodayPlan({
           >
             <Sun size={14} />
             לתכנן
-          </button>
-          <button
-            onClick={() => openPaste()}
-            className="flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary active:scale-95"
-          >
-            <ClipboardList size={14} />
-            הודעה ארוכה
           </button>
         </header>
         {!hasToday ? (
