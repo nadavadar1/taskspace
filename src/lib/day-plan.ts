@@ -1,5 +1,6 @@
 import { addDays, dayOfWeek } from "./dates";
 import { PRIORITY_MAP } from "./constants";
+import { isMoment } from "./focus";
 import type { Task } from "./types";
 
 /**
@@ -60,7 +61,8 @@ export function planDay(all: Task[], doneToday: Task[], today: string, nowHM: st
   return {
     overdue: open.filter((t) => t.due_date && t.due_date < today).sort(byDate),
     blocks: BLOCKS.map((b) => ({ ...b, tasks: shown.filter((t) => blockOf(t.due_time) === b.key) })),
-    now: todays[0],
+    // "לצאת לפאדל" at 15:30 is not the thing to work on at 11:00; its own nudge and check-in cover it
+    now: todays.find((t) => !isMoment(t)),
     nowBlock,
     tomorrow: open.filter((t) => t.due_date === tomorrow).sort(byClock),
     week: open.filter((t) => t.due_date && t.due_date > tomorrow && t.due_date <= saturday).sort(byDate),
