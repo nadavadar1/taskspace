@@ -64,7 +64,7 @@ export function planPrep(
   time: string,
   today: string,
   nowHM: string,
-): { kind: EventKind | null; prep: PrepTask[] } {
+): { kind: EventKind | null; prep: PrepTask[]; leave: number | null; steps: string[] } {
   const kind = eventKind(`${title} ${note}`);
   const name = title.split(/\s+/).slice(0, 5).join(" ");
   const days = diffDays(date, today);
@@ -94,25 +94,22 @@ export function planPrep(
     }
   }
 
-  if (kind === "sport") {
-    at(`לאכול לפני ה${name}`, 90, "שעה וחצי לפני, כדי לא לשחק על בטן מלאה");
-    at(`להכין ציוד: ${gear(title)}`, 60, "שעה לפני");
-    at(`לצאת ל${name}`, 30, "חצי שעה לפני. אם הדרך ארוכה, להקדים");
-  } else if (kind === "meeting") {
+  // sport: one task, with the gear as its steps and the leave time on it (no separate "eat / gear / leave" tasks)
+  if (kind === "meeting") {
     if (days >= 1 && !make) on(addDays(date, -1), `להתכונן ל${name}`, "ערב לפני: מה המטרה ומה אני רוצה להגיד", "20:00");
     at(`לוודא שאני מוכן ל${name}`, 60, "שעה לפני: חומרים, קישור, מקום");
   } else if (kind === "exam") {
     if (days >= 6) on(weekday(addDays(date, -5)), `להתחיל ללמוד ל${name}`, "חמישה ימים לפני");
     if (days >= 2) on(addDays(date, -1), `חזרה אחרונה ל${name}`, "יום לפני");
-    at(`לצאת ל${name}`, 45, "עם תעודה ומה שמותר להכניס");
-  } else if (kind === "appointment") {
-    at(`לצאת ל${name}`, 30, "חצי שעה לפני");
   } else if (kind === "social") {
     at(`להתארגן ל${name}`, 60, "שעה לפני");
   }
 
   return {
     kind,
+    // leaving is shown on the event itself ("🚗 לצאת ב-15:30"), not as one more task
+    leave: kind === "sport" || kind === "appointment" ? 30 : kind === "exam" ? 45 : null,
+    steps: kind === "sport" ? gear(title).split(/, | ו(?=[^ ]+$)/) : [],
     prep: prep.filter((p) => p.due_date > today || (p.due_date === today && (!p.due_time || p.due_time > nowHM))),
   };
 }

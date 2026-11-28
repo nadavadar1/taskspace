@@ -89,6 +89,12 @@ function toUTC(iso: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
+/** "16:00" − 30 → "15:30" (clamped to the same day). */
+export function shiftTime(time: string, minutes: number): string {
+  const t = Math.min(Math.max(Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + minutes, 0), 23 * 60 + 59);
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 export function addDays(iso: string, n: number): string {
   const dt = toUTC(iso);
   dt.setUTCDate(dt.getUTCDate() + n);

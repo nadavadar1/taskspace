@@ -6,10 +6,11 @@ import { useData } from "./DataProvider";
 import { cn, useLocalChoice } from "./ui";
 import { useNowHM } from "./TodayPlan";
 import { PRIORITY_MAP } from "@/lib/constants";
-import { formatShort, relativeLabel } from "@/lib/dates";
+import { formatShort, relativeLabel, shiftTime } from "@/lib/dates";
 import { KIND_LABEL, planPrep } from "@/lib/event-prep";
 import { parseQuickTask } from "@/lib/quick-parse";
 import { recurrenceLabel } from "@/lib/recurrence";
+import { newChecklistId } from "@/lib/recurrence";
 
 const EXAMPLES = [
   "להתקשר לסופי מחר ב-10:00 #לימודים",
@@ -105,6 +106,8 @@ export function QuickAdd({
       due_date: parsed.due_date,
       due_time: parsed.due_time,
       end_time: parsed.end_time,
+      leave_min: plan?.leave ?? null,
+      checklist: (plan?.steps ?? []).map((text) => ({ id: newChecklistId(), text, done: false })),
       description: parsed.note,
       recurrence: parsed.recurrence,
       recurrence_n: parsed.recurrence_n,
@@ -260,6 +263,11 @@ export function QuickAdd({
             {plan.kind ? `${KIND_LABEL[plan.kind]} · ` : ""}
             {relativeLabel(parsed.due_date!, today)} {parsed.due_time}
             {parsed.end_time ? ` עד ${parsed.end_time}` : ""}
+            {plan.leave && parsed.due_time && (
+              <span className="ms-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                🚗 לצאת ב-{shiftTime(parsed.due_time, -plan.leave)}
+              </span>
+            )}
           </div>
           {plan.prep.length > 0 ? (
             <>
@@ -298,6 +306,8 @@ export function QuickAdd({
                 })}
               </ul>
             </>
+          ) : plan.steps.length > 0 ? (
+            <div className="text-xs text-muted">לקחת: {plan.steps.join(", ")}. מופיע כצעדים במשימה.</div>
           ) : (
             <div className="text-xs text-muted">תקבל התראה רבע שעה לפני.</div>
           )}

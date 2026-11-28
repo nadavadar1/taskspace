@@ -53,9 +53,12 @@ async function run(req: Request): Promise<Response> {
     // a task with a time pushes a few minutes before it, without having to set a reminder by hand
     const nudges = await claimTimedNudges(15);
     for (const t of nudges) {
+      // with a leave time, the push comes when it is time to go
       const result = await broadcastPush({
-        title: `⏰ ${t.due_time} · ${t.title}`,
-        body: t.description ? t.description.slice(0, 160) : "עוד כמה דקות. אפשר להתחיל.",
+        title: t.leave_min ? `🚗 לצאת עכשיו · ${t.title}` : `⏰ ${t.due_time} · ${t.title}`,
+        body: t.leave_min
+          ? `מתחיל ב-${t.due_time}, צריך לצאת ${t.leave_min} דק׳ לפני.${t.description ? ` ${t.description.slice(0, 120)}` : ""}`
+          : t.description ? t.description.slice(0, 160) : "עוד כמה דקות. אפשר להתחיל.",
         url: "/",
         tag: `nudge-${t.id}`,
       });

@@ -15,6 +15,7 @@ export const PATCH = guarded<Ctx>(async (req, ctx) => {
   if (body.due_date === null || typeof body.due_date === "string") patch.due_date = body.due_date;
   if (body.due_time === null || typeof body.due_time === "string") patch.due_time = body.due_time;
   if (body.end_time === null || typeof body.end_time === "string") patch.end_time = body.end_time;
+  if (body.leave_min === null || typeof body.leave_min === "number") patch.leave_min = body.leave_min;
   if (typeof body.status_note === "string") patch.status_note = body.status_note;
   if (typeof body.space_id === "number") patch.space_id = body.space_id;
   if (typeof body.position === "number") patch.position = body.position;

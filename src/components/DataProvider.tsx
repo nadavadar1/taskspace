@@ -11,6 +11,7 @@ export interface NewTaskDefaults {
   due_date?: string | null;
   due_time?: string | null;
   end_time?: string | null;
+  leave_min?: number | null;
   status?: Status;
   priority?: Priority;
   title?: string;
