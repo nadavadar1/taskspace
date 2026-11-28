@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CalendarDays, X } from "lucide-react";
 import { useData } from "./DataProvider";
 import { Swipeable } from "./Swipe";
@@ -117,6 +118,7 @@ export function UpcomingEvents({ events, spaceById, limit = 6 }: { events: Task[
  */
 export function WeekStrip({ items, spaceById }: { items: Task[]; spaceById: Map<number, Space> }) {
   const { today, openTask } = useData();
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   const byDay = (d: string) =>
     items
@@ -135,6 +137,7 @@ export function WeekStrip({ items, spaceById }: { items: Task[]; spaceById: Map<
       <div className="scroll-thin -mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-7 sm:overflow-visible sm:px-0">
         {days.map((d, i) => {
           const list = byDay(d);
+          const shown = openDay === d ? list : list.slice(0, 4);
           return (
             <div
               key={d}
@@ -155,7 +158,7 @@ export function WeekStrip({ items, spaceById }: { items: Task[]; spaceById: Map<
                 <span className="py-2 text-xs text-slate-400">פנוי ✨</span>
               ) : (
                 <ul className="space-y-1">
-                  {list.slice(0, 4).map((t) => {
+                  {shown.map((t) => {
                     const color = spaceById.get(t.space_id)?.color ?? "#6366f1";
                     return (
                       <li key={t.id}>
@@ -174,7 +177,18 @@ export function WeekStrip({ items, spaceById }: { items: Task[]; spaceById: Map<
                       </li>
                     );
                   })}
-                  {list.length > 4 && <li className="px-1.5 text-[11px] font-bold text-muted">ועוד {list.length - 4}</li>}
+                  {list.length > 4 && (
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => setOpenDay(openDay === d ? null : d)}
+                        className="w-full rounded-lg px-1.5 py-1.5 text-start text-xs font-bold text-primary active:bg-indigo-50"
+                        aria-expanded={openDay === d}
+                      >
+                        {openDay === d ? "פחות" : `ועוד ${list.length - 4} ▾`}
+                      </button>
+                    </li>
+                  )}
                 </ul>
               )}
             </div>
