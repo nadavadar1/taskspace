@@ -6,6 +6,7 @@ import { useData } from "./DataProvider";
 import { Sheet, cn } from "./ui";
 import { PRIORITIES, isClosed } from "@/lib/constants";
 import { addDays, dayOfWeek, relativeLabel } from "@/lib/dates";
+import { isMoment } from "@/lib/focus";
 
 /** Long press (or right click) on a task: the common changes in one tap, without opening the full form. */
 export function TaskActionsSheet() {
@@ -66,7 +67,7 @@ export function TaskActionsSheet() {
           />
         </div>
 
-        {!isClosed(task.status) && !isEvent && !covered && (
+        {!isClosed(task.status) && !isEvent && !covered && !isMoment(task) && (
           <button
             onClick={() => {
               closeActions();

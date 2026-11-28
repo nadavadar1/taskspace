@@ -10,7 +10,7 @@ import { QuickAdd } from "./QuickAdd";
 import { DueLabel, TaskExtras } from "./TaskCard";
 import { ChecklistProgressBar } from "./Checklist";
 import { PriorityBadge, ProgressRing, cn, useLocalChoice, useMounted } from "./ui";
-import { completionStreak, focusQueue } from "@/lib/focus";
+import { completionStreak, focusQueue, isMoment } from "@/lib/focus";
 import { GestureTip } from "./GestureTip";
 import { UpcomingEvents, WeekStrip } from "./Events";
 import { RoutineCard, routinesNow } from "./RoutineCard";
@@ -385,14 +385,16 @@ function NextUpCard({
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Link
-          href={`/focus?task=${task.id}&start=15`}
-          className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:brightness-110"
-          style={{ backgroundColor: color }}
-        >
-          <Play size={15} />
-          15 דקות עכשיו
-        </Link>
+        {!isMoment(task) && (
+          <Link
+            href={`/focus?task=${task.id}&start=15`}
+            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:brightness-110"
+            style={{ backgroundColor: color }}
+          >
+            <Play size={15} />
+            15 דקות עכשיו
+          </Link>
+        )}
         <button
           onClick={onDone}
           className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-bold text-emerald-600 transition hover:bg-emerald-50"
