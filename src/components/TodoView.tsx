@@ -13,7 +13,7 @@ import { CoveredPill, HabitDots, useCovered } from "./Recurring";
 import { seriesKey } from "@/lib/recurrence";
 import { EventRow } from "./Events";
 import { StatusIcon, cn } from "./ui";
-import { PRIORITIES, PRIORITY_MAP, STATUS_MAP, isClosed } from "@/lib/constants";
+import { PRIORITIES, PRIORITY_MAP, STATUS_MAP, isClosed, isRoutine } from "@/lib/constants";
 import type { Space, Task } from "@/lib/types";
 
 function byDueThenPosition(a: Task, b: Task) {
@@ -133,7 +133,7 @@ export function TodoView({ space }: { space: Space }) {
   const [showDone, setShowDone] = useState(false);
   const [showNotDone, setShowNotDone] = useState(true);
 
-  const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id), [tasks, space.id]);
+  const spaceTasks = useMemo(() => tasks.filter((t) => t.space_id === space.id && !isRoutine(t)), [tasks, space.id]);
   const events = spaceTasks
     .filter((t) => t.is_event && (!t.due_date || t.due_date >= todayStr))
     .sort((a, b) => (a.due_date ?? "9").localeCompare(b.due_date ?? "9"));
