@@ -5,7 +5,7 @@ import { Bell, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useData } from "./DataProvider";
 import { TaskRow } from "./TaskRow";
 import { cn } from "./ui";
-import { PRIORITY_MAP, isClosed } from "@/lib/constants";
+import { PRIORITY_MAP, isClosed, isRoutine } from "@/lib/constants";
 import { HE_DAYS_SHORT, HE_MONTHS, formatLong, monthGrid, parts, relativeLabel } from "@/lib/dates";
 import { reminderFiresOn } from "@/lib/reminder-utils";
 import type { Space, Task } from "@/lib/types";
@@ -23,7 +23,7 @@ export function PhoneCalendar({ spaces }: { spaces: Space[] }) {
 
   const multi = spaces.length > 1;
   const spaceById = useMemo(() => new Map(spaces.map((s) => [s.id, s])), [spaces]);
-  const scoped = useMemo(() => tasks.filter((t) => spaceById.has(t.space_id)), [tasks, spaceById]);
+  const scoped = useMemo(() => tasks.filter((t) => spaceById.has(t.space_id) && !isRoutine(t)), [tasks, spaceById]);
   const byDay = useMemo(() => {
     const m = new Map<string, Task[]>();
     for (const t of scoped) {

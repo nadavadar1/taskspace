@@ -20,9 +20,17 @@ export function isClosed(status: Status): boolean {
   return status === "done" || status === "not_done";
 }
 
-/** Something still to do: not closed, and not a calendar event (events are only shown in the calendar and "upcoming"). */
-export function isOpenTask(t: { status: Status; is_event?: boolean }): boolean {
-  return !isClosed(t.status) && !t.is_event;
+/**
+ * A standing routine (morning / night): lives only in the routine card, never as a dated to-do.
+ * shortcut: recognised by "רוטינ" in the title; add a real flag if routines grow beyond morning/night.
+ */
+export function isRoutine(t: { title: string }): boolean {
+  return /רוטינ/.test(t.title);
+}
+
+/** Something still to do: not closed, not a calendar event (shown in the calendar and "upcoming"), not a routine. */
+export function isOpenTask(t: { status: Status; is_event?: boolean; title: string }): boolean {
+  return !isClosed(t.status) && !t.is_event && !isRoutine(t);
 }
 
 export const VIEWS: { key: ViewType; label: string; description: string }[] = [

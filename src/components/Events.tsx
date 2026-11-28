@@ -42,7 +42,7 @@ export function EventRow({ task, space, showSpace }: { task: Task; space?: Space
           <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
             <span className="inline-flex items-center gap-1 font-bold" style={{ color }}>
               <CalendarDays size={12} />
-              אירוע ביומן
+              {task.is_event ? "אירוע ביומן" : "בלו״ז"}
             </span>
             {task.due_date && <span className="font-bold text-slate-600">{eventCountdown(task.due_date, today)}</span>}
             {task.due_time && <span>{task.due_time}{task.end_time ? ` עד ${task.end_time}` : ""}</span>}
@@ -93,7 +93,7 @@ function DateTile({ date, color }: { date: string | null; color: string }) {
 }
 
 /** "📅 בקרוב ביומן": the next calendar events, so there is time to prepare. */
-export function UpcomingEvents({ events, spaceById, limit = 4 }: { events: Task[]; spaceById: Map<number, Space>; limit?: number }) {
+export function UpcomingEvents({ events, spaceById, limit = 6 }: { events: Task[]; spaceById: Map<number, Space>; limit?: number }) {
   if (!events.length) return null;
   return (
     <section className="mb-5 overflow-hidden rounded-2xl border border-line bg-surface shadow-soft" aria-label="בקרוב ביומן">

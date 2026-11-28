@@ -16,12 +16,13 @@ import { Bell, CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from "luci
 import { useData } from "./DataProvider";
 import { cn, StatusIcon, useIsPhone } from "./ui";
 import { PhoneCalendar } from "./PhoneCalendar";
-import { PRIORITY_MAP, isClosed } from "@/lib/constants";
+import { PRIORITY_MAP, isClosed, isRoutine } from "@/lib/constants";
 import { HE_DAYS, HE_MONTHS, monthGrid, parts, formatLong } from "@/lib/dates";
 import { reminderFiresOn } from "@/lib/reminder-utils";
 import type { Reminder, Space, Task } from "@/lib/types";
 
-const MAX_CHIPS = 3;
+// enough for a busy day: a hidden "+1" made schedule items easy to miss
+const MAX_CHIPS = 8;
 
 function Chip({
   task,
@@ -198,7 +199,7 @@ function MonthCalendar({ spaces }: { spaces: Space[] }) {
   const colorBySpace = useMemo(() => new Map(spaces.map((s) => [s.id, s.color])), [spaces]);
   const colorOf = (t: Task) => (multi ? colorBySpace.get(t.space_id) : undefined);
 
-  const scopedTasks = useMemo(() => tasks.filter((t) => colorBySpace.has(t.space_id)), [tasks, colorBySpace]);
+  const scopedTasks = useMemo(() => tasks.filter((t) => colorBySpace.has(t.space_id) && !isRoutine(t)), [tasks, colorBySpace]);
   const byDay = useMemo(() => {
     const m = new Map<string, Task[]>();
     for (const t of scopedTasks) {

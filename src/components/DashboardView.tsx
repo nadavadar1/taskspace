@@ -76,9 +76,15 @@ export function DashboardView() {
   const upcomingEvents = useMemo(
     () =>
       scoped
-        .filter((t) => t.is_event && t.due_date && t.due_date >= today)
+        // events, plus anything with a set time in the next two weeks (padel, a meeting): the real schedule
+        .filter(
+          (t) =>
+            !!t.due_date &&
+            t.due_date >= today &&
+            (t.is_event || (!!t.due_time && isTodo(t) && t.due_date <= addDays(today, 14))),
+        )
         .sort((a, b) => `${a.due_date} ${a.due_time ?? ""}`.localeCompare(`${b.due_date} ${b.due_time ?? ""}`)),
-    [scoped, today],
+    [scoped, today, isTodo],
   );
 
   const weekItems = useMemo(() => {
@@ -88,15 +94,14 @@ export function DashboardView() {
 
   const nowHM = useNowHM();
   const [ritualOpen, setRitualOpen] = useMorningRitual();
-  // the routine for this hour sits in its own card at the top, so it is left out of the plan below
-  const routines = useMemo(() => routinesNow(open, today, nowHM), [open, today, nowHM]);
-  const planOpen = useMemo(() => open.filter((t) => !routines.includes(t)), [open, routines]);
+  // routines are not to-dos (isTodo leaves them out): only the one for this hour, in its own card
+  const routines = useMemo(() => routinesNow(scoped, nowHM), [scoped, nowHM]);
   const plan = useMemo(() => {
     const doneToday = scoped.filter(
       (t) => !t.is_event && t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
     );
-    return planDay(planOpen, doneToday, today, nowHM);
-  }, [planOpen, scoped, today, nowHM]);
+    return planDay(open, doneToday, today, nowHM);
+  }, [open, scoped, today, nowHM]);
   const todayLeft = open.filter((t) => t.due_date === today).length;
 
   const weekStart = startOfWeek(today);
@@ -104,7 +109,7 @@ export function DashboardView() {
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) >= weekStart,
   ).length;
   // "now" follows the day's clock; with nothing for today, the usual focus order
-  const nextUp = useMemo(() => plan.now ?? focusQueue(planOpen, today, series)[0], [plan.now, planOpen, today, series]);
+  const nextUp = useMemo(() => plan.now ?? focusQueue(open, today, series)[0], [plan.now, open, today, series]);
   const closedToday = scoped.filter(
     (t) => t.status === "done" && t.completed_at && todayISO(new Date(t.completed_at)) === today,
   ).length;

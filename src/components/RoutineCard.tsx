@@ -3,37 +3,50 @@
 import { useData } from "./DataProvider";
 import { StepCheck } from "./Checklist";
 import { cn } from "./ui";
+import { isClosed, isRoutine } from "@/lib/constants";
 import type { Task } from "@/lib/types";
 
-// shortcut: a routine is a task whose title says "רוטינה"; add a real flag if routines grow beyond morning/night
-const isRoutine = (t: Task) => /רוטינ/.test(t.title);
-
-/** The routine that fits the hour: the morning one until 15:00, the night one after; other routines always. */
-export function routinesNow(open: Task[], today: string, nowHM: string): Task[] {
+/**
+ * The routine that fits the hour: the morning one until 15:00, the night one after; other routines always.
+ * Each routine repeats daily, so its open round is dated today (to do), earlier (left over: starts fresh)
+ * or tomorrow (today's is done).
+ */
+export function routinesNow(tasks: Task[], nowHM: string): Task[] {
   const night = nowHM >= "15:00";
-  return open.filter(
-    (t) =>
-      isRoutine(t) &&
-      !!t.due_date &&
-      t.due_date <= today &&
-      (/בוקר/.test(t.title) ? !night : /לילה|ערב/.test(t.title) ? night : true),
+  return tasks.filter(
+    (t) => isRoutine(t) && !isClosed(t.status) && (/בוקר/.test(t.title) ? !night : /לילה|ערב/.test(t.title) ? night : true),
   );
 }
 
 /** Top of "היום": the routine's steps, ready to tick. The last tick closes it until tomorrow. */
 export function RoutineCard({ routines }: { routines: Task[] }) {
-  const { patchTask, openTask } = useData();
+  const { patchTask, openTask, today } = useData();
   if (!routines.length) return null;
   return (
     <div className="mb-4 grid gap-3 sm:mb-5 lg:grid-cols-2" data-routines>
       {routines.map((t) => {
         const night = /לילה|ערב/.test(t.title);
-        const steps = t.checklist;
+        const doneToday = !!t.due_date && t.due_date > today;
+        const stale = !t.due_date || t.due_date < today;
+        // a round left from an earlier day starts again with nothing ticked
+        const steps = stale ? t.checklist.map((s) => ({ ...s, done: false })) : t.checklist;
         const done = steps.filter((s) => s.done).length;
         const toggle = (id: string) => {
           const checklist = steps.map((s) => (s.id === id ? { ...s, done: !s.done } : s));
-          patchTask(t.id, checklist.every((s) => s.done) ? { checklist, status: "done" } : { checklist });
+          const base = stale ? { checklist, due_date: today } : { checklist };
+          patchTask(t.id, checklist.every((s) => s.done) ? { ...base, status: "done" } : base);
         };
+        if (doneToday)
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => openTask(t.id)}
+              className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-start text-sm font-bold text-emerald-700"
+            >
+              ✓ {t.title} · הושלמה להיום
+            </button>
+          );
         return (
           <section key={t.id} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-soft" aria-label={t.title}>
             <button
