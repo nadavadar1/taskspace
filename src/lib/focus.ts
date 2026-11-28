@@ -2,6 +2,15 @@ import { PRIORITY_MAP, isOpenTask } from "./constants";
 import { addDays, todayISO } from "./dates";
 import type { Task } from "./types";
 
+/**
+ * "לצאת לפאדל", "להתארגן ל...", or something at a set time that is not a to-do verb ("פאדל" 07:30, "דיון" 11:00):
+ * a moment in the day, not work to sit down to, so it stays out of focus mode.
+ */
+export function isMoment(t: Pick<Task, "title" | "due_time">): boolean {
+  const title = t.title.trim();
+  return /^(לצאת|להתארגן|לאכול|להכין ציוד|לוודא שאני מוכן|לנסוע|לאסוף)/.test(title) || (!!t.due_time && !/^ל/.test(title));
+}
+
 const dueKey = (t: Task) => `${t.due_date ?? "9999-99-99"} ${t.due_time ?? "99:99"}`;
 const rank = (t: Task) => PRIORITY_MAP[t.priority].rank;
 
@@ -23,7 +32,7 @@ export function focusQueue(tasks: Task[], today: string, covered?: Set<number> |
   const isCovered = (t: Task) =>
     !covered ? false : covered instanceof Set ? covered.has(t.id) : !!covered.get(t.id)?.covered;
   return tasks
-    .filter((t) => isOpenTask(t))
+    .filter((t) => isOpenTask(t) && !isMoment(t))
     .sort(
       (a, b) =>
         Number(isCovered(a)) - Number(isCovered(b)) ||
