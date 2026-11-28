@@ -7,7 +7,7 @@ import type { ChecklistItem, Priority, Recurrence, Settings, Space, Status, Task
 
 const TASK_COLS = `id, space_id, title, description, priority, status,
   to_char(due_date, 'YYYY-MM-DD') as due_date, to_char(due_time, 'HH24:MI') as due_time,
-  to_char(end_time, 'HH24:MI') as end_time, status_note, checklist, recurrence, recurrence_n, is_event, position, created_at, completed_at`;
+  to_char(end_time, 'HH24:MI') as end_time, leave_min, status_note, checklist, recurrence, recurrence_n, is_event, position, created_at, completed_at`;
 
 function mapTask(r: Record<string, unknown>): Task {
   return {
@@ -20,6 +20,7 @@ function mapTask(r: Record<string, unknown>): Task {
     due_date: (r.due_date as string | null) ?? null,
     due_time: (r.due_time as string | null) ?? null,
     end_time: (r.end_time as string | null) ?? null,
+    leave_min: (r.leave_min as number | null) ?? null,
     status_note: (r.status_note as string | null) ?? "",
     checklist: sanitizeChecklist(r.checklist),
     recurrence: isRecurrence(r.recurrence) ? r.recurrence : "none",
@@ -117,6 +118,7 @@ export interface TaskInput {
   due_date?: string | null;
   due_time?: string | null;
   end_time?: string | null;
+  leave_min?: number | null;
   status_note?: string;
   checklist?: unknown;
   recurrence?: string;
@@ -145,6 +147,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const due = isISO(input.due_date) ? input.due_date : rec.recurrence !== "none" ? todayISO() : null;
   const dueTime = due && isHHMM(input.due_time) ? input.due_time : null;
   const endTime = dueTime && isHHMM(input.end_time) ? input.end_time : null;
+  const leaveMin = dueTime ? cleanLeave(input.leave_min) : null;
   const description = String(input.description ?? "").slice(0, 4000);
   const note = status === "not_done" ? String(input.status_note ?? "").trim().slice(0, 1000) : "";
   const checklist = sanitizeChecklist(input.checklist ?? []);
@@ -155,8 +158,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
   }
   const rows = await db.unsafe(
     `insert into ts_tasks (space_id, title, description, priority, status, due_date, due_time, position, status_note,
-                           checklist, recurrence, recurrence_n, is_event, end_time, completed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14, ${status === "done" ? "now()" : "null"})
+                           checklist, recurrence, recurrence_n, is_event, end_time, leave_min, completed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,$15, ${status === "done" ? "now()" : "null"})
      returning ${TASK_COLS}`,
     [
       input.space_id,
@@ -173,6 +176,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
       rec.recurrence_n,
       input.is_event === true,
       endTime,
+      leaveMin,
     ] as never[],
   );
   return mapTask(rows[0]);
@@ -187,6 +191,7 @@ export interface TaskPatch {
   due_date?: string | null;
   due_time?: string | null;
   end_time?: string | null;
+  leave_min?: number | null;
   status_note?: string;
   checklist?: unknown;
   recurrence?: string;
@@ -264,6 +269,9 @@ export async function updateTaskFull(id: number, patch: TaskPatch): Promise<{ ta
   if ((patch.end_time === null || isHHMM(patch.end_time)) && patch.due_date !== null && patch.due_time !== null) {
     push("end_time", patch.end_time);
   }
+  if (patch.leave_min !== undefined) {
+    push("leave_min", cleanLeave(patch.leave_min));
+  }
   if (typeof patch.space_id === "number") push("space_id", patch.space_id);
   if (typeof patch.position === "number" && Number.isFinite(patch.position)) push("position", patch.position);
   if (STATUS_KEYS.includes(patch.status as Status)) {
@@ -315,6 +323,7 @@ async function spawnNext(done: Task, reminder: ReminderSnapshot | null): Promise
     due_date: nextDue,
     due_time: done.due_time,
     end_time: done.end_time,
+    leave_min: done.leave_min,
     checklist: done.checklist.map((i: ChecklistItem) => ({ ...i, done: false })),
     recurrence: done.recurrence,
     recurrence_n: done.recurrence_n,
@@ -423,7 +432,12 @@ export async function setDashboardSpaces(ids: number[] | null): Promise<void> {
  * Open tasks for today whose time comes within the next `ahead` minutes (or passed in the last two),
  * claimed atomically so each is pushed once. Tasks that have their own reminder are left to it.
  */
-export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "title" | "description" | "space_id" | "due_time">[]> {
+/** Minutes before a timed task to leave: whole minutes, 5 to 3 hours, or null. */
+function cleanLeave(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 5 && v <= 180 ? v : null;
+}
+
+export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "title" | "description" | "space_id" | "due_time" | "leave_min">[]> {
   await ensureSchema();
   const now = utcToZoned(new Date().toISOString());
   const at = (min: number) => {
@@ -434,11 +448,11 @@ export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "t
   const rows = await sql().unsafe(
     `update ts_tasks t set nudged_for = $1::text || ' ' || to_char(t.due_time, 'HH24:MI')
      where t.due_date = $4::date and t.due_time is not null
-       and t.due_time between $2::time and $3::time
+       and (t.due_time - make_interval(mins => coalesce(t.leave_min, 0))) between $2::time and $3::time
        and t.status not in ('done', 'not_done') and not t.is_event
        and t.nudged_for is distinct from ($1::text || ' ' || to_char(t.due_time, 'HH24:MI'))
        and not exists (select 1 from ts_reminders r where r.task_id = t.id and r.enabled)
-     returning t.id, t.title, t.description, t.space_id, to_char(t.due_time, 'HH24:MI') as due_time`,
+     returning t.id, t.title, t.description, t.space_id, to_char(t.due_time, 'HH24:MI') as due_time, t.leave_min`,
     [now.date, at(-2), at(ahead), now.date],
   );
   return rows.map((r) => ({
@@ -447,6 +461,7 @@ export async function claimTimedNudges(ahead = 10): Promise<Pick<Task, "id" | "t
     description: (r.description as string) ?? "",
     space_id: r.space_id as number,
     due_time: r.due_time as string,
+    leave_min: (r.leave_min as number | null) ?? null,
   }));
 }
 

@@ -5,7 +5,7 @@ import { CalendarDays, X } from "lucide-react";
 import { useData } from "./DataProvider";
 import { Swipeable } from "./Swipe";
 import { cn } from "./ui";
-import { HE_DAYS, HE_MONTHS, addDays, dayOfWeek, diffDays, formatLong, parts } from "@/lib/dates";
+import { HE_DAYS, HE_MONTHS, addDays, dayOfWeek, diffDays, formatLong, parts, shiftTime } from "@/lib/dates";
 import type { Space, Task } from "@/lib/types";
 
 /** "היום" / "מחר" / "בעוד 12 ימים" / "לפני 3 ימים". */
@@ -47,6 +47,9 @@ export function EventRow({ task, space, showSpace }: { task: Task; space?: Space
             </span>
             {task.due_date && <span className="font-bold text-slate-600">{eventCountdown(task.due_date, today)}</span>}
             {task.due_time && <span>{task.due_time}{task.end_time ? ` עד ${task.end_time}` : ""}</span>}
+            {task.due_time && task.leave_min && (
+              <span className="rounded-full bg-amber-100 px-1.5 font-bold text-amber-800">🚗 לצאת ב-{shiftTime(task.due_time, -task.leave_min)}</span>
+            )}
             {showSpace && sp && (
               <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sp.color }} />
@@ -173,6 +176,11 @@ export function WeekStrip({ items, spaceById }: { items: Task[]; spaceById: Map<
                         >
                           {t.due_time && <span className={cn("me-1 font-bold", !t.is_event && "text-primary")}>{t.due_time}</span>}
                           <span className="line-clamp-2">{t.title}</span>
+                          {t.due_time && t.leave_min && (
+                            <span className={cn("mt-0.5 block text-[11px] font-bold", t.is_event ? "text-white/90" : "text-amber-700")}>
+                              🚗 {shiftTime(t.due_time, -t.leave_min)}
+                            </span>
+                          )}
                         </button>
                       </li>
                     );

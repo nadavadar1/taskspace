@@ -52,6 +52,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
   const [due, setDue] = useState<string>(editing ? (editing.due_date ?? "") : (defaults.due_date ?? ""));
   const [dueTime, setDueTime] = useState<string>(editing ? (editing.due_time ?? "") : (defaults.due_time ?? ""));
   const [endTime, setEndTime] = useState<string>(editing ? (editing.end_time ?? "") : (defaults.end_time ?? ""));
+  const [leaveMin, setLeaveMin] = useState<number | null>(editing ? editing.leave_min : (defaults.leave_min ?? null));
   const [spaceId, setSpaceId] = useState<number | undefined>(
     editing?.space_id ?? defaults.space_id ?? spaces[0]?.id,
   );
@@ -164,6 +165,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         due_date: dueDate || null,
         due_time: dueDate && dueTime ? dueTime : null,
         end_time: dueDate && dueTime && endTime > dueTime ? endTime : null,
+        leave_min: dueDate && dueTime ? leaveMin : null,
         space_id: spaceId,
       });
     } else if (taskId === null) {
@@ -178,6 +180,7 @@ function TaskForm({ onClose }: { onClose: () => void }) {
         due_date: dueDate || null,
         due_time: dueDate && dueTime ? dueTime : null,
         end_time: dueDate && dueTime && endTime > dueTime ? endTime : null,
+        leave_min: dueDate && dueTime ? leaveMin : null,
       });
       taskId = created?.id ?? null;
       createdId.current = taskId;
@@ -391,6 +394,24 @@ function TaskForm({ onClose }: { onClose: () => void }) {
                 aria-label="שעת סיום"
               />
             </div>
+            {due && dueTime && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted">🚗 לצאת לפני:</span>
+                {([null, 15, 30, 45, 60] as const).map((m) => (
+                  <button
+                    key={String(m)}
+                    type="button"
+                    onClick={() => setLeaveMin(m)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-xs font-medium transition",
+                      leaveMin === m ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                    )}
+                  >
+                    {m === null ? "לא צריך" : m === 60 ? "שעה" : `${m} דק׳`}
+                  </button>
+                ))}
+              </div>
+            )}
             {due && dueTime && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-muted">משך:</span>

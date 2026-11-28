@@ -3,7 +3,7 @@
 import { Flag, ListChecks, Repeat } from "lucide-react";
 import { recurrenceLabel } from "@/lib/recurrence";
 import { PRIORITY_MAP, isClosed } from "@/lib/constants";
-import { relativeLabel } from "@/lib/dates";
+import { relativeLabel, shiftTime } from "@/lib/dates";
 import type { Space, Task } from "@/lib/types";
 import { cn, PriorityBadge, StatusIcon } from "./ui";
 
@@ -29,9 +29,18 @@ export function DueLabel({ task, today, className }: { task: Task; today: string
 export function TaskExtras({ task }: { task: Task }) {
   const total = task.checklist.length;
   const done = task.checklist.filter((i) => i.done).length;
-  if (!total && task.recurrence === "none") return null;
+  const leave = task.leave_min && task.due_time && !isClosed(task.status) ? shiftTime(task.due_time, -task.leave_min) : null;
+  if (!total && task.recurrence === "none" && !leave) return null;
   return (
     <>
+      {leave && (
+        <span
+          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800"
+          title={`צריך לצאת ${task.leave_min} דק׳ לפני`}
+        >
+          🚗 לצאת ב-{leave}
+        </span>
+      )}
       {total > 0 && (
         <span
           className={cn(

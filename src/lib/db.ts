@@ -58,6 +58,7 @@ async function init(): Promise<void> {
   await db`alter table ts_tasks add column if not exists nudged_for text`;
   await db`alter table ts_tasks add column if not exists end_time time`;
   await db`alter table ts_tasks add column if not exists asked_for text`;
+  await db`alter table ts_tasks add column if not exists leave_min integer`;
   await db`create index if not exists ts_tasks_space_idx on ts_tasks(space_id)`;
   await db`
     create table if not exists ts_settings (
